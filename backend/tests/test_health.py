@@ -16,7 +16,8 @@ def test_health_is_liveness_without_database(monkeypatch):
             response = await client.get("/health")
             assert response.status_code == 200
             assert response.json() == {"status": "ok"}
-            assert (await client.post("/documents")).status_code == 404
-            assert (await client.get("/documents")).status_code == 404
+            # These routes now exist; inspecting OpenAPI needs no database.
+            paths = (await client.get("/openapi.json")).json()["paths"]
+            assert {"get", "post"} <= paths["/documents"].keys()
 
     asyncio.run(check())

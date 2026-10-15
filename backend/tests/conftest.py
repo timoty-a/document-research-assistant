@@ -1,6 +1,8 @@
 """Database tests require an explicit flag and always target dra_test."""
 
 from pathlib import Path
+from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from alembic import command
@@ -60,3 +62,46 @@ def db_connection(test_engine):
             yield connection
         finally:
             transaction.rollback()
+
+
+@pytest.fixture
+def api_database(test_engine):
+    """Real commits in a private schema inside dra_test; preserve existing rows."""
+    from app.main import create_app
+
+    settings = Settings()
+    assert settings.app_env == "test" and settings.db_name == settings.db_user == "dra_test"
+    schema = "dra_api_test_" + uuid4().hex
+    with test_engine.begin() as connection:
+        assert_project_database(connection, settings)
+        connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+        # Clone the actual migrated table, not model-generated DDL. Public
+        # schema constraints/migration are checked by the foundation tests.
+        connection.exec_driver_sql(
+            f'CREATE TABLE "{schema}".documents (LIKE public.documents INCLUDING ALL)'
+        )
+
+    engines = []
+
+    def make_engine():
+        engine = create_db_engine(settings)
+        engine.update_execution_options(schema_translate_map={None: schema})
+        engines.append(engine)
+        return engine
+
+    def make_app():
+        app = create_app(settings)
+        app.state.engine.update_execution_options(schema_translate_map={None: schema})
+        engines.append(app.state.engine)
+        return app
+
+    try:
+        yield SimpleNamespace(engine=make_engine(), make_engine=make_engine, make_app=make_app)
+    finally:
+        for engine in engines:
+            engine.dispose()
+        with test_engine.begin() as connection:
+            assert_project_database(connection, settings)
+            # Only this test's generated schema is removed. No truncation of
+            # shared tables or deletion of pre-existing test documents.
+            connection.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')

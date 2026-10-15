@@ -4,7 +4,7 @@ A learning project for software engineering. Users will eventually upload docume
 
 ## Status
 
-Milestone 1 is **in progress**. The backend foundation and liveness endpoint are implemented. Dedicated development/test database authentication, the development migration, live schema verification, and all 36 foundation tests have passed. Uploading and listing are not implemented. See [the implementation plan](docs/PLAN.md) for completed and remaining work.
+Milestone 1 is **complete**. The local backend supports document upload, metadata listing, and application liveness. The previously run automated PostgreSQL checks passed, and the user has now manually verified upload/list behavior, client errors, and persistence after a backend restart. See [the implementation plan](docs/PLAN.md) for the evidence and planned later milestones.
 
 ## Planned design
 
@@ -14,9 +14,9 @@ Milestone 1 is **in progress**. The backend foundation and liveness endpoint are
 
 Add infrastructure only when a concrete requirement justifies it.
 
-## First milestone — in progress
+## First milestone — complete
 
-Build a local backend API to upload non-empty UTF-8 `.txt` files up to 1 MiB (1,048,576 bytes), persist content and metadata in PostgreSQL, and list document metadata without full content. Try it through FastAPI's API documentation interface before building the frontend.
+The local backend API accepts non-empty UTF-8 `.txt` files up to 1 MiB (1,048,576 bytes), persists content and metadata in PostgreSQL, and lists document metadata without full content. The user completed a manual API trial before frontend work.
 
 Uploads must reject empty files, unsupported extensions, invalid UTF-8, and oversized files with clear client errors. Successful uploads return an ID and metadata; committed documents survive backend restarts, and failed uploads leave no partial record.
 
@@ -83,7 +83,7 @@ After provisioning and configuration:
 
 Before online migrations, the guard verifies database name, current role, owner, safe role privileges, and the project marker. It refuses unverified databases. Alembic owns schema changes; application startup never creates tables. All database access is synchronous.
 
-The migration creates UUID IDs, original filenames, decoded text, original UTF-8 byte sizes, and timezone-aware timestamps. All fields are required; checks enforce `.txt` extensions case-insensitively, 1–1,048,576 bytes, nonblank text including Unicode whitespace, and matching UTF-8 byte counts. Accepted text is stored without trimming. These constraints supplement the future API validation; they do not implement uploads.
+The migration creates UUID IDs, original filenames, decoded text, original UTF-8 byte sizes, and timezone-aware timestamps. All fields are required; checks enforce `.txt` extensions case-insensitively, 1–1,048,576 bytes, nonblank text including Unicode whitespace, and matching UTF-8 byte counts. These constraints supplement endpoint validation. No schema change was needed for the upload/list feature.
 
 To inspect generated SQL without contacting PostgreSQL:
 
@@ -107,6 +107,29 @@ Open `http://127.0.0.1:8000/docs` or request `http://127.0.0.1:8000/health`. The
 .venv/bin/python -m pytest -c backend/pyproject.toml backend/tests --database
 ```
 
-Database tests use `TEST_DB_PASSWORD` with the fixed `dra_test` role/database, verify ownership before writes, migrate that database to head, and roll back synthetic test rows. They never truncate tables, drop databases, or run against development. Without `--database`, database checks are explicitly skipped; with it, unavailable access is a failure.
+Database tests use `TEST_DB_PASSWORD` with the fixed `dra_test` role/database, verify ownership before writes, and migrate that database to head. Foundation row tests roll back; API tests clone the migrated table into a unique test schema, exercise real commits, and remove only that generated schema afterward. Existing test documents are preserved. Tests never truncate shared tables, drop databases, or mutate development. Without `--database`, database checks are explicitly skipped; with it, unavailable access is a failure.
 
-Verification so far: application import, dependency consistency, real loopback HTTP `/health`, offline migration generation, both database identities, development migration to `0001_documents`, and the live schema check passed. Alembic's model/schema comparison found no new upgrade operations. With PostgreSQL integration tests enabled and deprecation warnings treated as errors, all 36 tests passed with no failures, skips, or warnings. `path_separator = os` resolves the Alembic 1.20.0 path warning. Details and remaining milestone work are recorded in [docs/PLAN.md](docs/PLAN.md).
+### Upload and list API
+
+- `POST /documents`: send exactly one multipart upload named `file`. Successful commits return `201` with `id`, `original_filename`, `byte_size`, and `created_at`; no content is returned. Extensions are checked case-insensitively, regardless of the declared MIME type.
+- `GET /documents`: returns a JSON list of only those metadata fields, or `[]`. SQL selects metadata columns without fetching content and orders by creation timestamp ascending, then UUID ascending.
+- `400`: invalid filename/extension, invalid UTF-8, zero-byte or whitespace-only content, or NUL characters. Missing `file` retains FastAPI's normal `422` validation response. Files over 1,048,576 bytes receive `413`.
+- Accepted text is preserved exactly, including whitespace, line endings, BOM, and Unicode spelling. Byte size counts uploaded bytes, not characters. NUL is rejected because PostgreSQL `text` cannot store it.
+- Filenames are metadata, never paths used to save files. The existing column is `TEXT`, with no 255-character limit: validation rejects empty names, NUL, invalid Unicode encoding, and values exceeding PostgreSQL's text storage bound (1 GiB minus header/allocation overhead).
+- Database errors return a fixed `503` message. Content and metadata are inserted in one transaction; success is returned only after commit. Failed transactions are rolled back, connections are released, uploads are closed, and underlying database exceptions are not logged or returned by the application.
+
+Both endpoint handlers are synchronous, so FastAPI runs file reads and SQLAlchemy/psycopg work in worker threads. The async dependency only checks the already-parsed form; it makes no database calls. Application shutdown disposes the engine pool through a worker thread.
+
+The file-size validator reads at most 65,536 bytes per call and stops after 1,048,577 bytes (the limit plus one overflow-detection byte), ignoring client size declarations. **This is not a total HTTP request-size limit.** FastAPI/Starlette parses multipart data before the handler runs and may buffer file data in memory or spool it to a temporary file first, including data larger than our accepted document limit. The parser's spool threshold is not an upload-size cap. A transport-level request limit remains outside this local milestone.
+
+### Manual verification — completed by the user
+
+The user reported these manual results, separately from the automated checks:
+
+- Document listing works.
+- A valid `.txt` upload returns `201` and metadata.
+- The uploaded document appears in the list without its content.
+- Empty files and unsupported extensions return `400`.
+- The document remains listed after restarting the backend.
+
+Previously run automated verification: 69 tests passed with PostgreSQL enabled and deprecation warnings treated as errors, with no failures, skips, or warnings. Coverage includes exact stored text, metadata projection/order, validation and byte boundaries, rollback observed from another connection, sanitized database failures, and persistence through a fresh application/connection. `pip check` passed. Earlier foundation checks verified the live schema at `0001_documents` and no pending Alembic model/schema changes. These tests were not rerun for this documentation-only update. Details are in [docs/PLAN.md](docs/PLAN.md).

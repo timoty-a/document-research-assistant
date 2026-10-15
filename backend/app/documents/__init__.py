@@ -1,1 +1,1 @@
-"""Document persistence; upload and listing will be implemented later."""
+"""Document upload validation, transactional persistence, and metadata listing."""
