@@ -1,8 +1,8 @@
 # Implementation plan
 
-All milestones are **planned, not implemented**. Implement one agreed milestone at a time.
+Milestone 1 is **in progress**; later milestones remain **planned**. Implement one agreed milestone at a time.
 
-## Milestone 1 — local document API (planned)
+## Milestone 1 — local document API (in progress)
 
 Use Python, FastAPI, and PostgreSQL in one backend application. Separate API handling, validation, document operations, and persistence into clear modules. Add no further infrastructure without a concrete requirement. Use FastAPI's API documentation interface for manual trials; the frontend comes later.
 
@@ -27,7 +27,39 @@ Local development only: bind the API for local access and document that limitati
 
 ### Next implementation step
 
-Create the minimal backend structure, dependency declarations, configuration, and database migration for documents. Implement the agreed validation conventions, transactional upload, and metadata listing. Add meaningful tests using PostgreSQL, verify restart persistence and rollback, and document reproducible local setup and checks.
+The foundation and its PostgreSQL verification are complete. Next, implement upload validation, transactional upload, and metadata listing, with tests for the agreed API behavior. Milestone 1 remains in progress until all acceptance criteria are verified.
+
+### Foundation progress
+
+Implemented:
+
+- Minimal FastAPI application with `GET /health` (liveness only; no database query).
+- Project-local virtual environment; runtime/test/build dependencies resolved for Python 3.14.7 and pinned in `backend/requirements.lock`.
+- Validated configuration, ignored private `.env`, and tracked placeholder `.env.example`.
+- Synchronous SQLAlchemy/psycopg setup, document mapping, and initial Alembic migration with database constraints.
+- Database identity guard and provisioning script that refuses existing names. Dedicated development/test roles and databases were provisioned privately; no unrelated database, role, or server configuration was changed by this verification.
+- Setup, migration, local run, and test instructions.
+
+Verification:
+
+- Application import: passed; document endpoints are absent.
+- Dependency compatibility: installation on Python 3.14.7 and `pip check` passed.
+- Real HTTP request on loopback: `/health` returned `200 {"status":"ok"}`; temporary verification server stopped afterward.
+- Offline Alembic SQL generation: passed; this is not live PostgreSQL execution.
+- Initial sandbox test run stalled at the HTTP test and was interrupted. Tests are run outside the sandbox because of its socket restrictions.
+- Database authentication: passed for `dra_dev` and `dra_test`, each with the matching database name and owner. Role and database markers matched `document-research-assistant:development` and `document-research-assistant:test`, respectively. Both roles lack superuser, database creation, role creation, replication, and RLS bypass privileges. No credentials were displayed.
+- Development migration: `alembic upgrade head` passed; current revision is `0001_documents (head)`.
+- Development live schema check: passed for project identity, column types/nullability, primary key, timezone-aware timestamp, all five check constraints, and migration revision.
+- Automated checks with `--database`: **36 passed, 0 failed, 0 skipped**. Test migrations and synthetic row mutations used only the verified `dra_test` database; test rows were rolled back. Health tests verify document endpoints are absent and liveness never opens a database connection.
+- Checkpoint review: added `path_separator = os`, matching the installed Alembic 1.20.0 template. `alembic current` reports `0001_documents (head)`; `alembic check` reports no new upgrade operations; the live schema check passed. The full PostgreSQL suite passed again with deprecation warnings treated as errors: **36 passed, 0 failed, 0 skipped, 0 warnings**.
+- Git review: `.env`, virtual environments and caches are excluded; no configured credential values were found in tracked/index files or proposed nonignored files. Nothing was staged. The existing local `.vscode/settings.json` was preserved and narrowly ignored for the checkpoint.
+- The earlier database-access blocker is resolved by private provisioning and configuration; administrator access was not needed for this verification.
+
+Remaining:
+
+- Implement upload and metadata-only listing with agreed validation and client errors.
+- Verify all upload acceptance criteria, transaction failure behavior, restart persistence, and manual API documentation trials.
+- Keep authentication and per-user authorization mandatory before public access. No frontend, AI features, containers, or public deployment are part of this foundation.
 
 ## Later milestones
 

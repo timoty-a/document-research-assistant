@@ -21,3 +21,6 @@ build/
 
 # Local uploaded documents
 uploads/
+
+# Local editor settings
+.vscode/settings.json

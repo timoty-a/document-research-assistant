@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools==83.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "document-research-backend"
+version = "0.1.0"
+description = "Local document research API"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "fastapi>=0.119,<1",
+    "uvicorn>=0.38,<1",
+    "pydantic-settings>=2.11,<3",
+    "pydantic>=2.12,<3",
+    "SQLAlchemy>=2.0.44,<2.1",
+    "psycopg[binary]>=3.3,<4",
+    "alembic>=1.17,<2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.4,<10", "httpx>=0.28,<1"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = ["database: explicitly enabled PostgreSQL integration checks"]
