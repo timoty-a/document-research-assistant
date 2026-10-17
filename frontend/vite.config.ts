@@ -8,7 +8,7 @@ export default defineConfig({
   server: {
     host: '127.0.0.1', port: 5173, strictPort: true,
     fs: { strict: true, allow: ['.'] },
-    proxy: { '/documents': { target: 'http://127.0.0.1:8000' } },
+    proxy: { '/documents': { target: 'http://127.0.0.1:8000' }, '/auth': { target: 'http://127.0.0.1:8000' } },
   },
   preview: { host: '127.0.0.1', port: 4173, strictPort: true },
   test: { environment: 'jsdom', setupFiles: ['./src/test-setup.ts'] },

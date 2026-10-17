@@ -2,12 +2,15 @@ import { StrictMode } from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { App } from './App';
+import { AuthenticatedLibrary } from './App';
+const context = '11111111-1111-4111-8111-111111111111';
+const session = { context, csrf: 'synthetic-csrf', signal: new AbortController().signal, isCurrent: () => true, invalidate: () => {} };
+function App() { return <AuthenticatedLibrary session={session} />; }
 import { MAX_BYTES, reconcile, type DocumentMetadata } from './api';
 
 const first: DocumentMetadata = { id: 'c2158240-1860-4416-8f9d-f1fe537ce001', original_filename: 'same.txt', byte_size: 4, created_at: '2026-10-13T09:10:00Z' };
 const second = { ...first, id: 'c2158240-1860-4416-8f9d-f1fe537ce002', created_at: '2026-10-13T09:11:00Z' };
-const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'X-Session-Context': context } });
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => { fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock); });
@@ -62,7 +65,8 @@ describe('library and upload behaviour (mocked HTTP)', () => {
     expect(screen.getByText('1 document')).toBeInTheDocument();
     expect(screen.getByText(`“${name}” is now in your library.`)).toBeInTheDocument();
     const [url, init] = fetchMock.mock.calls[1];
-    expect(url).toBe('/documents'); expect(init.method).toBe('POST'); expect(init.headers).toBeUndefined();
+    expect(url).toBe('/documents'); expect(init.method).toBe('POST'); expect(init.headers).toEqual({ 'X-CSRF-Token': session.csrf });
+    expect(init.headers['Content-Type']).toBeUndefined();
     expect(init.body.get('file').name).toBe(name);
   });
   it('prevents duplicate submissions while an upload is pending', async () => {
@@ -163,7 +167,7 @@ it('keeps an uncertain save blocked if the recommended refresh also fails', asyn
 });
 it('does not confirm a 201 with a non-JSON body', async () => {
   const user = await loaded(); await select(user);
-  fetchMock.mockResolvedValueOnce(new Response('<html>internal</html>',{status:201}));
+  fetchMock.mockResolvedValueOnce(new Response('<html>internal</html>',{status:201,headers:{'X-Session-Context':context}}));
   await user.click(screen.getByRole('button', {name:'Upload document'}));
   await screen.findByText('Save not confirmed');
   expect(document.body.textContent).not.toContain('<html>');

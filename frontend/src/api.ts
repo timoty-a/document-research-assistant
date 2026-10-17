@@ -1,3 +1,5 @@
+import type { LibrarySession } from "./useAuth";
+
 export const MAX_BYTES = 1_048_576;
 export interface DocumentMetadata {
   id: string;
@@ -7,7 +9,7 @@ export interface DocumentMetadata {
 }
 
 export class ApiError extends Error {
-  constructor(public readonly kind: 'rejected' | 'uncertain' | 'unavailable', message: string) {
+  constructor(public readonly kind: 'rejected' | 'uncertain' | 'unavailable' | 'session', message: string) {
     super(message);
   }
 }
@@ -34,27 +36,33 @@ function metadata(value: unknown): DocumentMetadata {
     byte_size: d.byte_size, created_at: d.created_at };
 }
 
-export async function listDocuments(): Promise<DocumentMetadata[]> {
+export async function listDocuments(session: LibrarySession): Promise<DocumentMetadata[]> {
   try {
-    const response = await fetch('/documents', { signal: AbortSignal.timeout(20_000), cache: 'no-store' });
+    const response = await fetch('/documents', { signal: AbortSignal.any([session.signal, AbortSignal.timeout(20_000)]), cache: 'no-store', credentials: 'same-origin' });
+    checkContext(response, session);
     if (response.status !== 200) throw new Error('List failed');
     const value: unknown = await response.json();
     if (!Array.isArray(value)) throw new Error('Invalid list');
     const documents = value.map(metadata);
     if (new Set(documents.map(d => d.id)).size !== documents.length) throw new Error('Duplicate ID');
     return documents;
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
     throw new ApiError('unavailable', 'Your library could not be refreshed. Please try again.');
   }
 }
 
-export async function uploadDocument(file: File): Promise<DocumentMetadata> {
+export async function uploadDocument(file: File, session: LibrarySession): Promise<DocumentMetadata> {
   const form = new FormData();
   form.append('file', file);
   try {
     const response = await fetch('/documents', {
-      method: 'POST', body: form, signal: AbortSignal.timeout(20_000),
+      method: 'POST', body: form, credentials: 'same-origin', headers: { 'X-CSRF-Token': session.csrf },
+      signal: AbortSignal.any([session.signal, AbortSignal.timeout(20_000)]),
     });
+    checkContext(response, session);
+    if (response.status === 403) throw new ApiError('session', 'Your session verification changed. Check the session and manually choose the file again.');
+    if (response.status === 429) throw new ApiError('rejected', 'Too many requests. Wait before trying again.');
     // These validation responses definitively reject this API's upload. Do not
     // display arbitrary server details: they may contain filenames or internals.
     const rejection: Record<number, string> = {
@@ -82,4 +90,13 @@ export function reconcile(...groups: DocumentMetadata[][]): DocumentMetadata[] {
   const unique = new Map(groups.flat().map(d => [d.id, d]));
   return [...unique.values()].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) ||
     timestampTail(a.created_at).localeCompare(timestampTail(b.created_at)) || a.id.localeCompare(b.id));
+}
+
+function checkContext(response: Response, session: LibrarySession) {
+  if (response.status === 401) throw new ApiError('session', 'Your session ended. Please log in again.');
+  // 503 can occur before authentication/context lookup; treat as unavailable or
+  // uncertain, never accept data from it. Successful and definite responses must match.
+  if ((response.headers.has('X-Session-Context') || response.status < 500) && response.headers.get('X-Session-Context') !== session.context) {
+    throw new ApiError('session', 'Your session changed. Checking it before showing documents.');
+  }
 }

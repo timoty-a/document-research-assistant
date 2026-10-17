@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, DateTime, Integer, Text, func, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -21,6 +21,7 @@ NONBLANK_CONTENT = (
 class Document(Base):
     __tablename__ = "documents"
     __table_args__ = (
+        Index("ix_documents_owner_created_id", "owner_id", "created_at", "id"),
         CheckConstraint("length(original_filename) > 0", name="ck_documents_filename_nonempty"),
         CheckConstraint("lower(right(original_filename, 4)) = '.txt'", name="ck_documents_txt_extension"),
         CheckConstraint("original_byte_size BETWEEN 1 AND 1048576", name="ck_documents_byte_size"),
@@ -38,3 +39,5 @@ class Document(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+    owner_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", name="fk_documents_owner", ondelete="RESTRICT"))

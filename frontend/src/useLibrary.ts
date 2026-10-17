@@ -1,8 +1,9 @@
+import type { LibrarySession } from "./useAuth";
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, fileProblem, listDocuments, reconcile, uploadDocument, type DocumentMetadata } from './api';
 
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'rejected' | 'uncertain' | 'retry-ready';
-export function useLibrary() {
+export function useLibrary(session: LibrarySession) {
   const [documents, setDocuments] = useState<DocumentMetadata[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState(false);
@@ -27,16 +28,18 @@ export function useLibrary() {
     const id = ++requestId.current;
     setLoading(true); setListError(false); setRefreshed(false);
     try {
-      const rows = await listDocuments();
-      if (!mounted.current || id !== requestId.current) return;
+      const rows = await listDocuments(session);
+      if (!mounted.current || !session.isCurrent() || id !== requestId.current) return;
       setDocuments(reconcile(rows, [...confirmed.current.values()]));
       setRefreshed(documents !== null);
       if (status.current === 'uncertain') {
         updateStatus('retry-ready');
         setUploadMessage('Library refreshed. Check filenames, sizes and times before uploading again; another upload may create a duplicate.');
       }
-    } catch {
-      if (mounted.current && id === requestId.current) setListError(true);
+    } catch (error) {
+      if (!mounted.current || !session.isCurrent() || id !== requestId.current) return;
+      if (error instanceof ApiError && error.kind === 'session') { session.invalidate(error.message); return; }
+      setListError(true);
     } finally {
       if (mounted.current && id === requestId.current) { refreshing.current = false; setLoading(false); }
     }
@@ -60,15 +63,16 @@ export function useLibrary() {
     if (problem) { updateStatus('rejected'); setUploadMessage(problem); return; }
     uploading.current = true; updateStatus('uploading'); setUploadMessage('Saving your document. Please wait.');
     try {
-      const saved = await uploadDocument(file);
-      if (!mounted.current) return;
+      const saved = await uploadDocument(file, session);
+      if (!mounted.current || !session.isCurrent()) return;
       confirmed.current.set(saved.id, saved);
       setDocuments(previous => reconcile(previous ?? [], [saved]));
       setNewId(saved.id); updateStatus('success');
       setUploadMessage(`“${saved.original_filename}” is now in your library.`);
     } catch (error) {
-      if (!mounted.current) return;
+      if (!mounted.current || !session.isCurrent()) return;
       const safe = error instanceof ApiError ? error : new ApiError('uncertain', 'Saving could not be confirmed. Refresh your library before retrying.');
+      if (safe.kind === 'session') { session.invalidate(safe.message); return; }
       updateStatus(safe.kind === 'rejected' ? 'rejected' : 'uncertain'); setUploadMessage(safe.message);
     } finally { uploading.current = false; }
   }

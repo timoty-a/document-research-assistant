@@ -1,13 +1,15 @@
 import { useRef, type ReactNode } from 'react';
 import { DocumentList, formatSize } from './DocumentList';
 import { fileProblem } from './api';
+import { AuthForm } from './AuthForm';
+import { useAuth, type LibrarySession } from './useAuth';
 import { useLibrary } from './useLibrary';
 
 function Message({ title, children, kind = '', id }: { title: string; children: ReactNode; kind?: string; id?: string }) {
   return <section id={id} className={`message ${kind}`} role={kind === 'error' || kind === 'warning' ? 'alert' : 'status'}><strong>{title}</strong>{children}</section>;
 }
-export function App() {
-  const library = useLibrary();
+export function AuthenticatedLibrary({ session }: { session: LibrarySession }) {
+  const library = useLibrary(session);
   const picker = useRef<HTMLInputElement>(null);
   const refreshButton = useRef<HTMLButtonElement>(null);
   const { documents, loading, listError, refreshed, file, uploadStatus, uploadMessage, newId } = library;
@@ -21,10 +23,8 @@ export function App() {
   }
   function refreshFromMessage() { refreshButton.current?.focus(); void library.refresh(); }
   return <>
-    <a className="skip" href="#library">Skip to document library</a>
-    <div className={`page${empty ? ' is-empty' : ''}`}>
-      <header className="identity"><div className="wordmark" aria-label="Document Research"><em>document</em><span>research</span></div><span className="identity-caption">Source library</span></header>
-      <main>
+    <div className={empty ? "is-empty" : ""}>
+      <main id="main">
         <header className="intro"><div><p className="eyebrow">A place for your sources</p><h1>Document library.</h1><p className="intro-copy">Keep the material behind your work together.</p></div></header>
         <form className="upload-section" aria-labelledby="upload-heading" aria-describedby={`upload-limits${uploadMessage ? ' upload-feedback' : ''}`} onSubmit={e => { e.preventDefault(); void library.upload(); }}>
           <div><h2 id="upload-heading">Add a text document</h2><p className="upload-limits" id="upload-limits">.txt files · UTF-8 text · Up to 1 MiB per file</p></div>
@@ -52,4 +52,26 @@ export function App() {
       </main>
     </div>
   </>;
+}
+
+export function App() {
+  const auth = useAuth();
+  const state = auth.state;
+  const message = 'message' in state ? state.message : undefined;
+  return <><a className="skip" href={auth.rechecking ? '#session-check' : '#main'}>Skip to main content</a><div className="page" aria-busy={auth.rechecking}>
+    {auth.rechecking && <section id="session-check" className="session-panel" role="status" tabIndex={-1}><h1>Checking your session.</h1><p>Please wait while we check your session.</p></section>}
+    <div hidden={auth.rechecking}>
+    <header className="identity"><div className="wordmark" aria-label="Document Research"><em>document</em><span>research</span></div>
+      {state.status === 'authenticated' ? <div className="account-controls"><span className="account-email">{state.session.user.email}</span><button className="button" onClick={() => void auth.logout()}>Log out</button></div> : <span className="identity-caption">Source library</span>}
+    </header>
+    {state.status === 'authenticated' && auth.library ? <AuthenticatedLibrary key={`${state.generation}:${state.session.session_context}`} session={auth.library} /> :
+      state.status === 'anonymous' ? <AuthForm key="anonymous" pending={auth.pending} error={auth.error} message={state.message} submit={auth.submit} /> :
+      <main id="main" className="session-panel" aria-busy={state.status === 'checking' || auth.pending}>
+        <p className="eyebrow">Your source library</p><h1>{state.status === 'checking' ? 'Checking your session.' : state.status === 'logout-pending' ? 'Your library is hidden.' : 'Let’s check your session.'}</h1>
+        <div role={message ? 'alert' : 'status'}><p>{message || (state.status === 'logout-pending' ? 'Logging out. Please wait.' : 'Please wait while we check your session.')}</p></div>
+        {state.status === 'logout-pending' && state.message && <button className="button primary" disabled={auth.pending} onClick={() => void auth.logout()}>Retry logout</button>}
+        {(state.status === 'unavailable' || (state.status === 'logout-pending' && !!state.message)) && <button className="button" disabled={auth.pending} onClick={auth.retryCheck}>Check session</button>}
+      </main>}
+    </div>
+  </div></>;
 }

@@ -18,6 +18,8 @@ async def single_file(request: Request, file: Annotated[UploadFile, File()]) -> 
     # second copy of the body. Keep FastAPI's standard 422 for a missing file.
     form = await request.form()
     files = [value for _, value in form.multi_items() if isinstance(value, StarletteUploadFile)]
+    if request.query_params or set(form.keys()) != {"file"}:
+        raise HTTPException(400, "Unexpected upload fields")
     if len(files) != 1 or len(form.getlist("file")) != 1:
         raise HTTPException(400, "Provide exactly one uploaded file named 'file'")
     return file
@@ -35,7 +37,8 @@ def upload_document(
 ) -> DocumentMetadata:
     document = read_document(file)
     try:
-        return service.save_document(engine, request.app.state.settings, document)
+        return service.save_document(engine, request.app.state.settings, document, request.state.identity.token_digest,
+                                     request.headers.get("x-csrf-token"), request.app.state.clock)
     except service.DocumentStorageError:
         raise HTTPException(503, "Document storage is temporarily unavailable") from None
 
@@ -43,6 +46,6 @@ def upload_document(
 @router.get("", response_model=list[DocumentMetadata])
 def get_documents(request: Request, engine: Annotated[Engine, Depends(get_engine)]) -> list[DocumentMetadata]:
     try:
-        return service.list_documents(engine, request.app.state.settings)
+        return service.list_documents(engine, request.app.state.settings, request.state.identity.token_digest, request.app.state.clock)
     except service.DocumentStorageError:
         raise HTTPException(503, "Document storage is temporarily unavailable") from None

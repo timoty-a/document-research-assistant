@@ -1,5 +1,5 @@
-"""Database tests require an explicit flag and always target dra_test."""
-
+"""Every database mutation/migration uses a unique schema in verified dra_test."""
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -7,55 +7,100 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import event, insert
 
 from app.config import Settings
 from app.db import assert_project_database, create_db_engine
 
 
+BACKEND = Path(__file__).resolve().parents[1]
+
+
 def pytest_addoption(parser):
-    parser.addoption("--database", action="store_true", help="Enable dra_test integration tests")
+    parser.addoption("--database", action="store_true", help="Enable isolated dra_test integration tests")
+
+
+def migrate(engine, settings, revision="head"):
+    with engine.begin() as connection:
+        config = Config(str(BACKEND / "alembic.ini"))
+        config.attributes.update(connection=connection, settings=settings)
+        command.upgrade(config, revision)
+
+
+def scoped_engine(settings, schema):
+    engine = create_db_engine(settings)
+
+    @event.listens_for(engine, "connect")
+    def path(dbapi, record):
+        # Generated identifier only. Set outside transactions so rollbacks do not
+        # restore public search_path. No fallback to public tables is permitted.
+        prior = dbapi.autocommit
+        dbapi.autocommit = True
+        with dbapi.cursor() as cursor:
+            cursor.execute(f'SET search_path TO "{schema}"')
+        dbapi.autocommit = prior
+    return engine
+
+
+@contextmanager
+def isolated_database(settings, revision="head"):
+    assert settings.app_env == "test" and settings.db_name == settings.db_user == "dra_test"
+    admin = create_db_engine(settings)
+    schema = "dra_test_" + uuid4().hex
+    engines = []
+    created = False
+    try:
+        with admin.begin() as connection:
+            assert_project_database(connection, settings)
+            connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+            created = True
+
+        def make_engine():
+            engine = scoped_engine(settings, schema)
+            engines.append(engine)
+            return engine
+
+        engine = make_engine()
+        migrate(engine, settings, revision)
+        from app.main import create_app
+
+        def make_app():
+            app = create_app(settings)
+            app.state.engine.dispose()
+            app.state.engine = make_engine()
+            return app
+
+        yield SimpleNamespace(engine=engine, settings=settings, schema=schema,
+                              make_engine=make_engine, make_app=make_app)
+    finally:
+        for engine in engines:
+            engine.dispose()
+        if created:
+            with admin.begin() as connection:
+                assert_project_database(connection, settings)
+                connection.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
+        admin.dispose()
 
 
 @pytest.fixture(scope="session")
-def test_engine(request):
+def test_settings(request):
     if not request.config.getoption("--database"):
-        pytest.skip("Use --database after provisioning the dedicated dra_test database")
+        pytest.skip("Use --database for isolated dra_test integration tests")
     local = Settings()
     if local.test_db_password is None:
         pytest.fail("TEST_DB_PASSWORD is required for explicit database tests")
-    settings = Settings(
-        _env_file=None,
-        app_env="test",
-        db_host=local.db_host,
-        db_port=local.db_port,
-        db_name="dra_test",
-        db_user="dra_test",
-        db_password=local.test_db_password,
-        test_db_password=None,
-    )
-    engine = create_db_engine(settings)
-    patch = pytest.MonkeyPatch()
-    try:
-        # Verify identity before any migration or test write.
-        with engine.connect() as connection:
-            assert_project_database(connection, settings)
-        for key, value in {
-            "APP_ENV": "test", "DB_NAME": "dra_test", "DB_USER": "dra_test",
-            "DB_HOST": settings.db_host, "DB_PORT": str(settings.db_port),
-            "DB_PASSWORD": settings.db_password.get_secret_value(),
-        }.items():
-            patch.setenv(key, value)
-        config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
-        command.upgrade(config, "head")
-        yield engine
-    finally:
-        patch.undo()
-        engine.dispose()
+    return Settings(_env_file=None, app_env="test", db_host=local.db_host, db_port=local.db_port,
+                    db_name="dra_test", db_user="dra_test", db_password=local.test_db_password)
+
+
+@pytest.fixture(scope="session")
+def test_engine(test_settings):
+    with isolated_database(test_settings) as database:
+        yield database.engine
 
 
 @pytest.fixture
 def db_connection(test_engine):
-    # Every test row rolls back; never truncate tables or drop a database.
     with test_engine.connect() as connection:
         transaction = connection.begin()
         try:
@@ -65,43 +110,45 @@ def db_connection(test_engine):
 
 
 @pytest.fixture
-def api_database(test_engine):
-    """Real commits in a private schema inside dra_test; preserve existing rows."""
-    from app.main import create_app
+def auth_database(test_settings):
+    with isolated_database(test_settings) as database:
+        yield database
 
-    settings = Settings()
-    assert settings.app_env == "test" and settings.db_name == settings.db_user == "dra_test"
-    schema = "dra_api_test_" + uuid4().hex
-    with test_engine.begin() as connection:
-        assert_project_database(connection, settings)
-        connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
-        # Clone the actual migrated table, not model-generated DDL. Public
-        # schema constraints/migration are checked by the foundation tests.
-        connection.exec_driver_sql(
-            f'CREATE TABLE "{schema}".documents (LIKE public.documents INCLUDING ALL)'
-        )
 
-    engines = []
+@pytest.fixture
+def api_database(test_settings):
+    """Existing document contract tests receive a genuine persisted identity."""
+    from app.auth.models import User
+    from app.auth.service import new_session, utcnow
+    from app.auth.security import dummy_hash
+    with isolated_database(test_settings) as database:
+        with database.engine.begin() as connection:
+            user = connection.scalar(insert(User).values(email="synthetic@example.com", email_key="synthetic@example.com", password_hash=dummy_hash()).returning(User.id))
+            raw, identity = new_session(connection, user, utcnow())
+        original_make_app = database.make_app
 
-    def make_engine():
-        engine = create_db_engine(settings)
-        engine.update_execution_options(schema_translate_map={None: schema})
-        engines.append(engine)
-        return engine
+        def make_app():
+            app = original_make_app()
+            app.state.test_auth = (raw, identity.csrf_token)
+            return app
+        database.make_app = make_app
+        database.user_id = user
+        yield database
 
-    def make_app():
-        app = create_app(settings)
-        app.state.engine.update_execution_options(schema_translate_map={None: schema})
-        engines.append(app.state.engine)
-        return app
 
-    try:
-        yield SimpleNamespace(engine=make_engine(), make_engine=make_engine, make_app=make_app)
-    finally:
-        for engine in engines:
-            engine.dispose()
-        with test_engine.begin() as connection:
-            assert_project_database(connection, settings)
-            # Only this test's generated schema is removed. No truncation of
-            # shared tables or deletion of pre-existing test documents.
-            connection.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
+# Share HTTP/auth fixtures with transaction-focused tests.
+from auth_helpers import Browser, Clock
+
+@pytest.fixture
+def browsers(auth_database):
+    clock = Clock()
+    clients = []
+
+    def make():
+        browser = Browser(auth_database, clock)
+        clients.append(browser)
+        return browser
+    yield make, clock, auth_database
+    for browser in clients:
+        browser.client.close()
+        browser.app.state.engine.dispose()

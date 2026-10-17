@@ -1,6 +1,6 @@
 # Implementation plan
 
-Milestones 1 and 2 are **complete**. Milestones 3–8 remain **planned**. Implement one agreed milestone at a time.
+Milestones 1–3 are **complete** for their agreed local scope; milestones 4–8 remain **planned**. Development authentication migration is a separate, unexecuted operator step. Implement one agreed milestone at a time.
 
 ## Milestone 1 — local document API (complete)
 
@@ -111,14 +111,61 @@ User-reported manual verification on 17 October 2026:
 
 This confirms the manual trial separately from the automated and agent-operated browser evidence above. The user did not report a separate screen-reader, zoom, or injected-failure audit; the previously recorded verification limits remain. Tests were not rerun for this documentation-only update.
 
-Milestone 2 has no remaining implementation work. Milestone 3 remains planned and has not started. Authentication, PDFs, AI, and public deployment are outside this milestone; keep both applications local.
+Milestone 2 has no remaining implementation work. Milestone 3 authentication work and its successful user manual trial are recorded below. Authentication, PDFs, AI, and public deployment are outside this milestone; keep both applications local.
+
+## Milestone 3 — authentication and ownership (complete — local scope)
+
+The user selected the local defaults in [AUTH_DESIGN.md](AUTH_DESIGN.md) and authorized backend implementation first, then the frontend integration. The user confirmed the remaining manual checks after retrying the file picker fix.
+
+Implemented backend:
+
+- `0002_auth`: users, opaque server-side sessions, atomic PostgreSQL rate counters, nullable document ownership/FK and `(owner_id, created_at, id)` index. Historical documents stay null/unassigned and invisible to accounts; no reset, deletion or reassignment.
+- `pwdlib` Argon2id (64 MiB, three iterations, four lanes), two-operation process concurrency bound, canonical case-insensitive email identity, generic registration followed by explicit login, profile upgrade on login.
+- Register/login/logout/me/CSRF endpoints, pre-session CSRF, exact Origin checks, HttpOnly local cookies, absolute/idle expiry, rotation and revocation, no-store responses and public session-context headers.
+- Authentication before multipart parsing; document services lock/revalidate the session and derive ownership from it inside their transactions. Owner-filtered metadata lists retain the previous response format and ordering.
+- Bounded, lock-aware cleanup and synthetic hash benchmark commands; dependency lock and private backup/migration instructions. The frontend integration is recorded separately below.
+
+Backend automated verification on 17 October 2026:
+
+- Full PostgreSQL-enabled suite: **154 passed, 0 failed/skipped/warnings** (74.08 seconds), with deprecation warnings treated as errors. HTTPX ASGI transport exercises the real app and real PostgreSQL, not a browser or TCP server.
+- Live migration/model/default/constraint consistency and actual `alembic check` passed in isolated migrated schemas; offline SQL generation, compilation, installation and `pip check` passed.
+- Coverage: legacy migration preservation/rollback/resume/refused downgrade, credential limits/normalization/hash upgrades, concurrent registrations/logins, session lifecycle and fresh-app restoration, CSRF/Origin, atomic HTTP/SQL throttles, two-user isolation/forged ownership, pre-parser/pre-body unauthorized rejection, rollback/commit failures, locked write/logout/expiry ordering and bounded cleanup preserving live activity. Existing authenticated document behaviour remains covered.
+- Argon2id benchmark: two concurrent operations, eight hash/verify pairs; median hash 0.258 s, verification 0.276 s, total 2.184 s, peak process RSS 328.0 MiB. This is a local measurement, not a total memory bound or production load test.
+- Initial runs found old tests coupled to schema/commit details and a client-side malformed-Unicode encoding failure; fixed. Deprecated TestClient usage was replaced by existing HTTPX ASGI transport. Final suite has no unresolved failures or skips.
+- `git diff --check` passed; changed/new files contain no configured credential-value matches. Private `.env`, environments and generated dependencies remain ignored. No frontend changes, staging, commit or push.
+
+ All migrations and mutations use generated schemas in guarded `dra_test`; shared `public` and development are not migrated. Development was checked read-only and remains at `0001_documents`, without auth tables.
+
+Frontend implemented and verified on 17 October 2026:
+
+- Paper/teal Login/Register forms, correct autocomplete/labels, validation/errors/pending states, generic registration with explicit login, session restoration, account header/Logout, local verification/recovery notice.
+- In-memory CSRF, same-origin cookies, `/auth` Vite proxy, runtime response validation, session-context headers and generation guards. Private library state unmounts on logout/revalidation/account changes; stale responses (including `401`) cannot populate another session. Failed logout keeps the view hidden with explicit retry; no mutation is automatically replayed. Focus revalidation hides the library while retaining its mounted file input for an unchanged session; changed/expired/unavailable sessions still clear private data.
+- Updated trial launcher guards `dra_test`, runs real migrations only in its generated schema with a private search path, disables proxy headers and removes only that schema on exit. No backend application changes were needed.
+
+Frontend automated evidence: **60 mocked component/API tests passed**, 0 failed/skipped; TypeScript and production build passed. Tests cover auth flows/errors, pending/duplicate prevention, restoration and unavailable states, logout failure/retry, CSRF/context mismatch, cross-tab/focus boundaries, session races, stale login/upload/list/401 responses, same-user rotation, no credential persistence and existing library behavior. Initial type/test-fixture issues and an old mutation’s pending flag crossing a session boundary were fixed; the final suite passed. Earlier backend evidence remains **154 passed**; it was not rerun for unchanged backend application code.
+
+Agent-operated real browser evidence (not the user’s manual trial): A/B registration and explicit login, native picker uploads, reload restoration, logout/account switching and cross-tab propagation passed against isolated PostgreSQL. A saw three owned records (including duplicate/long names); B started empty and saw only its separate same-named upload; switching back restored A’s three. A fresh SQL connection confirmed ownership, four committed rows, exact synthetic text and `0002_auth`. Desktop 1440px, mobile 390px and narrow 320px wrapping, expanded metadata, keyboard access/focus and no horizontal overflow were checked. Empty-credential login/library screenshots remain ignored; no passwords or tokens were captured. A terminated Vite trial process was restarted; browser verification recovered in a fresh localhost tab. Both servers were stopped afterward and test-schema removal was independently confirmed. `git diff --check` and changed-file credential scans passed; generated/private files remain ignored, and nothing was staged, committed or pushed.
+
+User manual trial feedback and correction — 17 October 2026: login worked, but selecting a file reset the library. The focus handler was remounting the file input when the native picker closed. A failing regression reproduced that behavior; the fix preserves the input and selected file for an unchanged session while keeping the view hidden during verification. Six new test cases cover before/after change-event timing, upload success after focus, in-flight confirmation retention, stale focus checks and expired/unavailable session clearing. Final frontend checks: **60 passed**, TypeScript/build passed. A fresh isolated real browser trial confirmed selection, upload appearing in the list and persistence after reload. Native OS timing is covered by mocked event orderings rather than a claim that every native dialog was exercised. Backend behavior is unchanged; development was not migrated. The user subsequently confirmed the upload fix works.
+
+User-reported manual verification — 17 October 2026:
+
+- Login works.
+- Selecting and uploading a document works after the file picker fix.
+- The session is restored after refreshing the page.
+- Logout works.
+- Switching between two accounts shows only the respective account’s documents.
+
+These confirmations are separate from the 154 backend tests, 60 mocked frontend tests and agent-operated browser checks above. Together they complete milestone 3’s agreed local implementation and manual trial. The user did not report a separate registration, keyboard/mobile, screen-reader, native-zoom or fault-injection audit; do not extend the confirmation to those checks. No tests were rerun for this documentation-only status update; `git diff --check` passed.
+
+Operational follow-up, not performed or authorized by this confirmation: development migration and a private backup/restore drill. `dra_dev` remains at `0001_documents`; historical documents remain unassigned. Real browser fault injection, screen-reader/native-zoom and long-duration expiry checks retain their recorded limits. HTTPS cookies, email verification/recovery and public deployment remain outside the completed local scope.
 
 ## Later milestones
 
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | 2 | Minimal React and TypeScript interface for uploading and listing documents | Complete |
-| 3 | User accounts and per-user document access | Planned |
+| 3 | User accounts and per-user document access | Complete — agreed local scope and user manual trial |
 | 4 | PDF extraction with explicit handling of unsupported scanned PDFs | Planned |
 | 5 | Retrieval and document questions with verifiable citations | Planned |
 | 6 | Saved conversations and explicit user preferences | Planned |

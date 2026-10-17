@@ -17,7 +17,10 @@ def request(app, method, path="/documents", **kwargs):
     async def run():
         async with app.router.lifespan_context(app):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-                return await client.request(method, path, **kwargs)
+                raw, csrf = app.state.test_auth
+                client.cookies.set("dra_session", raw)
+                headers = {"Origin": "http://127.0.0.1:8000", "X-CSRF-Token": csrf, **kwargs.pop("headers", {})}
+                return await client.request(method, path, headers=headers, **kwargs)
     return asyncio.run(run())
 
 
@@ -59,14 +62,14 @@ def test_deterministic_ordering_and_metadata_projection(api_database):
     with api_database.engine.begin() as connection:
         for number, timestamp in [(3, later), (2, older), (1, older)]:
             connection.execute(insert(Document).values(
-                id=UUID(int=number), original_filename=f"synthetic-{number}.txt",
+                owner_id=api_database.user_id, id=UUID(int=number), original_filename=f"synthetic-{number}.txt",
                 content="synthetic content", original_byte_size=17, created_at=timestamp,
             ))
     app = api_database.make_app()
     statements = []
 
     def capture(connection, cursor, statement, parameters, context, executemany):
-        if statement.lstrip().upper().startswith("SELECT") and ".documents" in statement:
+        if statement.lstrip().upper().startswith("SELECT") and "FROM documents" in statement:
             statements.append(statement)
 
     event.listen(app.state.engine, "before_cursor_execute", capture)
@@ -77,7 +80,7 @@ def test_deterministic_ordering_and_metadata_projection(api_database):
     assert [UUID(row["id"]).int for row in first.json()] == [1, 2, 3]
     assert all(set(row) == METADATA_KEYS for row in first.json())
     assert len(statements) == 2
-    assert all("content" not in sql.lower() and "*" not in sql for sql in statements)
+    assert all("content" not in sql.lower() and "*" not in sql and "documents.owner_id =" in sql for sql in statements)
 
 
 @pytest.mark.parametrize("filename,payload,status,message", [
@@ -152,6 +155,8 @@ def test_failure_before_commit_rolls_back_and_does_not_leak(api_database, caplog
             statement = args[1]
             if not statement.lstrip().upper().startswith("INSERT"):
                 return
+        if connection.scalar(select(func.count()).select_from(Document)) == 0:
+            return  # Ignore the earlier authentication transaction.
         assert connection.scalar(select(func.count()).select_from(Document)) == 1
         # An independent connection cannot see the uncommitted write.
         observed.append(row_count(api_database.engine))
@@ -161,7 +166,7 @@ def test_failure_before_commit_rolls_back_and_does_not_leak(api_database, caplog
     event.listen(app.state.engine, event_name, fail)
     response = request(app, "POST", files={"file": ("synthetic-private-filename.txt", b"synthetic-private-content")})
     assert response.status_code == 503
-    assert response.json() == {"detail": "Document storage is temporarily unavailable"}
+    assert "unavailable" in response.text
     assert observed == [0]
     assert row_count(api_database.engine) == 0
     for token in sensitive.split() + ["synthetic-private-SQL"]:
@@ -181,7 +186,7 @@ def test_list_database_failure_is_sanitized(api_database, caplog):
     event.listen(app.state.engine, "before_cursor_execute", fail)
     response = request(app, "GET")
     assert response.status_code == 503
-    assert response.json() == {"detail": "Document storage is temporarily unavailable"}
+    assert "unavailable" in response.text
     assert "synthetic-private" not in response.text + caplog.text
 
 

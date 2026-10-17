@@ -10,6 +10,9 @@ from uuid import uuid4
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'backend'))
 
 import uvicorn
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import event
 from app.config import Settings
 from app.db import assert_project_database, create_db_engine
 from app.main import create_app
@@ -30,11 +33,22 @@ def main():
         with engine.begin() as connection:
             assert_project_database(connection, settings)
             connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
-            connection.exec_driver_sql(f'CREATE TABLE "{schema}".documents (LIKE public.documents INCLUDING ALL)')
         created = True
-        app.state.engine.update_execution_options(schema_translate_map={None: schema})
+
+        @event.listens_for(app.state.engine, 'connect')
+        def private_search_path(dbapi, record):
+            previous = dbapi.autocommit
+            dbapi.autocommit = True
+            with dbapi.cursor() as cursor:
+                cursor.execute(f'SET search_path TO "{schema}"')
+            dbapi.autocommit = previous
+
+        with app.state.engine.begin() as connection:
+            config = Config(str(Path(__file__).resolve().parents[2] / 'backend' / 'alembic.ini'))
+            config.attributes.update(connection=connection, settings=settings)
+            command.upgrade(config, 'head')
         print('Isolated frontend trial: verified dra_test role/database; private temporary schema.')
-        uvicorn.run(app, host='127.0.0.1', port=8000, access_log=False)
+        uvicorn.run(app, host='127.0.0.1', port=8000, access_log=False, proxy_headers=False)
     finally:
         app.state.engine.dispose()
         if created:
