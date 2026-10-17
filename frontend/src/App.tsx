@@ -1,0 +1,55 @@
+import { useRef, type ReactNode } from 'react';
+import { DocumentList, formatSize } from './DocumentList';
+import { fileProblem } from './api';
+import { useLibrary } from './useLibrary';
+
+function Message({ title, children, kind = '', id }: { title: string; children: ReactNode; kind?: string; id?: string }) {
+  return <section id={id} className={`message ${kind}`} role={kind === 'error' || kind === 'warning' ? 'alert' : 'status'}><strong>{title}</strong>{children}</section>;
+}
+export function App() {
+  const library = useLibrary();
+  const picker = useRef<HTMLInputElement>(null);
+  const refreshButton = useRef<HTMLButtonElement>(null);
+  const { documents, loading, listError, refreshed, file, uploadStatus, uploadMessage, newId } = library;
+  const busy = uploadStatus === 'uploading';
+  const uncertain = uploadStatus === 'uncertain';
+  const initial = documents === null;
+  const empty = documents?.length === 0;
+  const uploadDisabled = !file || !!fileProblem(file) || busy || uncertain || uploadStatus === 'success';
+  function openPicker() {
+    if (picker.current) { picker.current.value = ''; picker.current.click(); }
+  }
+  function refreshFromMessage() { refreshButton.current?.focus(); void library.refresh(); }
+  return <>
+    <a className="skip" href="#library">Skip to document library</a>
+    <div className={`page${empty ? ' is-empty' : ''}`}>
+      <header className="identity"><div className="wordmark" aria-label="Document Research"><em>document</em><span>research</span></div><span className="identity-caption">Source library</span></header>
+      <main>
+        <header className="intro"><div><p className="eyebrow">A place for your sources</p><h1>Document library.</h1><p className="intro-copy">Keep the material behind your work together.</p></div></header>
+        <form className="upload-section" aria-labelledby="upload-heading" aria-describedby={`upload-limits${uploadMessage ? ' upload-feedback' : ''}`} onSubmit={e => { e.preventDefault(); void library.upload(); }}>
+          <div><h2 id="upload-heading">Add a text document</h2><p className="upload-limits" id="upload-limits">.txt files · UTF-8 text · Up to 1 MiB per file</p></div>
+          <div className="upload-controls">
+            <input ref={picker} id="document-file" className="sr-only" type="file" accept=".txt,text/plain" aria-label="Choose a text document" aria-describedby="upload-limits selected-file" disabled={busy || uncertain} onClick={e => { e.currentTarget.value = ''; }} onChange={e => library.choose(e.currentTarget.files?.[0] ?? null)} />
+            <div className="upload-actions"><button className="button" type="button" disabled={busy || uncertain} onClick={openPicker}>{uploadStatus === 'success' ? 'Choose another file' : 'Choose a file'}</button><button className="button primary" type="submit" disabled={uploadDisabled}>{busy ? 'Uploading…' : uploadStatus === 'success' ? 'Saved' : uploadStatus === 'retry-ready' ? 'Upload again' : 'Upload document'}</button></div>
+            <p className="selected-file" id="selected-file" role="status">{file ? <><strong>{file.name}</strong><span className="file-size">{formatSize(file.size)}</span></> : 'No file selected'}</p>
+          </div>
+        </form>
+        {uploadMessage && <div className="upload-message"><Message id="upload-feedback" title={uploadStatus === 'success' ? 'Document saved' : uncertain ? 'Save not confirmed' : uploadStatus === 'retry-ready' ? 'Review before retrying' : busy ? 'Saving your document' : 'File not saved'} kind={uncertain || uploadStatus === 'retry-ready' ? 'warning' : uploadStatus === 'rejected' ? 'error' : busy ? 'info' : ''}>
+          <p>{uploadMessage}</p>{uncertain && <button className="button" type="button" disabled={loading} onClick={refreshFromMessage}>{loading ? 'Refreshing…' : 'Refresh library'}</button>}
+        </Message></div>}
+        <section className="library" id="library" aria-labelledby="library-heading" tabIndex={-1}>
+          <div className="library-header"><h2 id="library-heading">Your documents</h2><div className="library-tools"><p className="document-count">{documents ? `${documents.length} ${documents.length === 1 ? 'document' : 'documents'}` : loading ? 'Loading…' : 'Not loaded'}</p><button ref={refreshButton} className="button refresh" type="button" aria-disabled={loading || busy} onClick={() => { if (!loading && !busy) void library.refresh(); }}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M16 7a6.5 6.5 0 1 0 .4 5M16 3v4h-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg><span id="refresh-label">{loading ? initial ? 'Loading…' : 'Refreshing…' : 'Refresh'}</span></button></div></div>
+          <div className="library-message">
+            {loading && <Message title={initial ? 'Loading your library' : 'Refreshing your library'} kind="info"><p>{initial ? 'Please wait while your documents are loaded.' : 'Your existing documents remain available while the list is updated.'}</p></Message>}
+            {listError && <Message title={initial ? 'Couldn’t load your library' : 'Couldn’t refresh'} kind="error"><p>{initial ? 'Try again to see your saved documents.' : 'Showing your previously loaded documents. Please try again.'}</p><button className="button" type="button" onClick={refreshFromMessage}>Try refreshing again</button></Message>}
+            {!loading && !listError && refreshed && <Message title="Library refreshed"><p>Your document list is up to date.</p></Message>}
+          </div>
+          {!!documents?.length && <DocumentList documents={documents} newId={newId} />}
+          {initial && <div className="state-panel">{loading ? <><div className="skeleton" aria-hidden="true"><span /><span /><span /></div><h3>Gathering your library.</h3></> : <><h3>Your library couldn’t be loaded.</h3><p>A connection problem doesn’t mean your library is empty.</p></>}</div>}
+          {empty && <div className="state-panel"><h3>Start with your first source.</h3><p>Add a text document. Its filename, size and upload time will appear here.</p><button className="button" type="button" disabled={busy || uncertain} onClick={openPicker}>Choose a text file</button></div>}
+          <p className="library-foot">Text documents only · Times shown in WAT</p>
+        </section>
+      </main>
+    </div>
+  </>;
+}

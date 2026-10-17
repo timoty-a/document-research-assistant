@@ -4,13 +4,13 @@ A learning project for software engineering. Users will eventually upload docume
 
 ## Status
 
-Milestone 1 is **complete**. The local backend supports document upload, metadata listing, and application liveness. The previously run automated PostgreSQL checks passed, and the user has now manually verified upload/list behavior, client errors, and persistence after a backend restart. See [the implementation plan](docs/PLAN.md) for the evidence and planned later milestones.
+Milestones 1 and 2 are **complete**. The user confirmed a successful manual interface trial on 17 October 2026. The local React interface now uploads text documents and lists saved metadata through the existing API. See [the implementation plan](docs/PLAN.md) for separate automated, browser, and user-reported evidence.
 
 ## Planned design
 
 - Backend: Python with FastAPI, starting as one application with clear modules for API handling, validation, document operations, and persistence.
 - Database: PostgreSQL for document content and metadata.
-- Frontend: React with TypeScript, beginning after the backend milestone.
+- Frontend: React with TypeScript and Vite, using the refined document-library design.
 
 Add infrastructure only when a concrete requirement justifies it.
 
@@ -132,4 +132,60 @@ The user reported these manual results, separately from the automated checks:
 - Empty files and unsupported extensions return `400`.
 - The document remains listed after restarting the backend.
 
-Previously run automated verification: 69 tests passed with PostgreSQL enabled and deprecation warnings treated as errors, with no failures, skips, or warnings. Coverage includes exact stored text, metadata projection/order, validation and byte boundaries, rollback observed from another connection, sanitized database failures, and persistence through a fresh application/connection. `pip check` passed. Earlier foundation checks verified the live schema at `0001_documents` and no pending Alembic model/schema changes. These tests were not rerun for this documentation-only update. Details are in [docs/PLAN.md](docs/PLAN.md).
+Previously run automated verification: 69 tests passed with PostgreSQL enabled and deprecation warnings treated as errors, with no failures, skips, or warnings. Coverage includes exact stored text, metadata projection/order, validation and byte boundaries, rollback observed from another connection, sanitized database failures, and persistence through a fresh application/connection. `pip check` passed. Earlier foundation checks verified the live schema at `0001_documents` and no pending Alembic model/schema changes. The full 69-test suite was rerun during milestone 2 verification and passed again. Details are in [docs/PLAN.md](docs/PLAN.md).
+
+## React interface — milestone 2 complete
+
+Prerequisites: the backend setup above, Node.js 22.12 or later in the 22.x line, and npm 10.x. Verified here with Node 22.23.1 and npm 10.9.8. No global packages are needed. `frontend/package.json` declares exact direct versions; `frontend/package-lock.json` pins the full dependency tree. Use the committed lockfile with `npm ci`.
+
+From the repository root, install reproducibly:
+
+```bash
+npm --prefix frontend ci
+```
+
+Run the backend in terminal 1 (development database):
+
+```bash
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Run the interface in terminal 2:
+
+```bash
+npm --prefix frontend run dev
+```
+
+Open [the library](http://127.0.0.1:5173/). Both servers bind to `127.0.0.1`; the fixed ports fail clearly if occupied. Vite proxies relative `/documents` requests to `http://127.0.0.1:8000` without rewriting paths. No backend CORS or API changes are required. `envDir: false` disables Vite dotenv loading, and its file-serving boundary is limited to `frontend/`. Never put database passwords in frontend files or `VITE_` variables: frontend configuration and bundles are public. This is a local development setup, not deployment instructions.
+
+Choose one file, then explicitly upload it. The client checks extension (case-insensitive), nonzero size, and the 1 MiB byte limit; the backend still validates UTF-8, whitespace-only text, NUL characters, filenames, and persistence. Only a matching, validated `201` response confirms a save. Network failures, invalid success bodies, and ambiguous server failures show “Save not confirmed”; refresh before an explicit retry. A filename match alone cannot confirm an uncertain save. No POST is automatically retried. Requests time out after 20 seconds.
+
+The library retains rows and expanded Details during refresh/failure. Acknowledged uploads are retained by ID for the current page session, so a stale list snapshot cannot hide them. Rows sort by timestamp (including PostgreSQL microsecond precision), then ID. Duplicate filenames remain separate. File sizes below 1 KiB display as bytes; Details always shows exact bytes and the full ID. Times are shown in WAT.
+
+### Frontend checks
+
+```bash
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
+```
+
+The build command also runs TypeScript checks. These commands passed: **32 mocked HTTP/component tests**, TypeScript, and the production bundle. Tests cover validation, definitive/uncertain errors, malformed responses, duplicate filenames, request races, confirmation retention after failed refresh, keyboard order, and explicit retry. `npm ls --depth=0` passed and installation reported no known dependency vulnerabilities. A production build does not establish a deployable/authenticated service.
+
+### Isolated real browser/API trial
+
+Stop any backend using port 8000 before this trial. **Do not run the development backend during automated write checks.** Use this alternative terminal-1 command; keep the same terminal-2 Vite command:
+
+```bash
+.venv/bin/python frontend/scripts/test_backend.py
+```
+
+The launcher privately reads the backend’s test password, fixes the role/database to `dra_test`, verifies ownership/privileges/project markers, then creates a unique schema by cloning the already-migrated `public.documents` table. The test database must be migrated first (the guarded backend `pytest ... --database` command above does this). No existing database objects or rows are reset. Ctrl+C removes only this launcher’s generated schema. An abrupt kill can leave that schema behind; do not broadly drop schemas or clear shared tables. Documents survive page reloads during the trial, but are deliberately removed when this temporary trial backend exits. Use the normal development backend for your own persistent library.
+
+Actual built-in browser verification against this isolated backend: native picker and explicit upload worked; four synthetic documents committed, including duplicate and long filenames; the list survived a full page reload; invalid UTF-8 was rejected without adding a row. A fresh authenticated PostgreSQL connection separately confirmed those four committed records, exact synthetic text, and byte sizes. Desktop 1440px, mobile 390px, and narrow 320px layouts, expanded metadata, visible focus, and wrapping were checked without horizontal overflow. Browser screenshots were captured locally; these generated images are ignored and excluded from Git.
+
+These real checks are separate from the mocked tests. Lost responses, stale responses, and injected refresh failures were verified in component tests, not fault-injected into the real browser session. Raw browser network instrumentation was denied by browser security policy; it was not bypassed. The page’s confirmation path requires a valid `201`; network response inspection was not independently captured. Native browser zoom and screen-reader announcements were not manually audited for the React implementation. Milestone 2 is **complete**, following the user-reported manual verification below. Temporary verification servers were stopped afterward.
+
+### User-reported manual interface verification — 17 October 2026
+
+The user confirmed that uploading, listing, Refresh, expanding Details, and retaining documents after page reload all worked, with no errors or layout problems reported. This manual confirmation is separate from the automated and agent-operated browser checks above. Tests were not rerun for this documentation-only status update. Milestone 3 remains planned.

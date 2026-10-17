@@ -1,6 +1,6 @@
 # Implementation plan
 
-Milestone 1 is **complete**; later milestones remain **planned**. Implement one agreed milestone at a time.
+Milestones 1 and 2 are **complete**. Milestones 3–8 remain **planned**. Implement one agreed milestone at a time.
 
 ## Milestone 1 — local document API (complete)
 
@@ -30,7 +30,7 @@ Local development only: bind the API for local access and document that limitati
 
 ### Next milestone
 
-Milestone 1 has no remaining work: automated checks and the user-reported manual API trial provide its completion evidence. Milestone 2, a minimal React upload/list interface, remains planned and should be agreed before implementation begins.
+Milestone 1 has no remaining work: automated checks and the user-reported manual API trial provide its completion evidence. Milestone 2, the React upload/list interface using the polished refined prototype, is also complete; its evidence is recorded below.
 
 ### Milestone 1 progress
 
@@ -45,7 +45,7 @@ Implemented:
 - Synchronous upload and metadata-listing handlers, bounded file reads, strict validation, metadata-only responses/SQL projection, deterministic ordering, and atomic commit-before-success storage.
 - Only the multipart parser dependency was added, pinned as `python-multipart==0.0.32` in the resolved lock. No schema migration was needed.
 
-Previously run automated verification (not rerun for this documentation update):
+Milestone 1 automated verification:
 
 - Application import and liveness checks passed; health remains independent of database readiness. OpenAPI now includes both document endpoints.
 - Dependency compatibility: installation on Python 3.14.7 and `pip check` passed.
@@ -71,13 +71,53 @@ User-reported manual verification:
 - Empty files and unsupported extensions return `400`.
 - The document remains listed after restarting the backend.
 
-Together with the automated checks above, these manual results complete milestone 1. Authentication and per-user authorization remain mandatory before public access; they are future work, not part of this local milestone. No later milestone was started by this documentation update.
+Together with the automated checks above, these manual results complete milestone 1. Authentication and per-user authorization remain mandatory before public access; they are future work, not part of this local milestone. Milestone 2 progress is recorded separately below.
+
+## Milestone 2 — React document library (complete)
+
+Acceptance criteria:
+
+- Real single-file selection, explicit upload, metadata listing/count, Refresh, and expandable Details match the refined prototype. No synthetic records or preview toolbar in the application.
+- Show TXT/UTF-8/1 MiB limits, client extension/zero-byte/size checks, and authoritative backend errors. Render filenames as text.
+- Relative `/documents` requests through a loopback Vite proxy; no frontend dotenv loading or database credentials in public configuration.
+- Separate initial loading/empty/refresh/upload/success/rejection/uncertain states; never automatically retry POST. Only validated `201` metadata confirms saving.
+- Preserve rows, open Details, and confirmed uploads during refresh/failure; reconcile by ID in backend order and guard against stale responses.
+- Keyboard controls, visible focus, status announcements, long filenames, and usable 320px/mobile/desktop layouts.
+- Meaningful component tests, TypeScript/build checks, isolated real PostgreSQL/browser upload-list-reload trial, and a user manual trial before completion.
+
+Implemented:
+
+- React/TypeScript/Vite in `frontend/`; exact dependencies and reproducible npm lockfile. Node 22.23.1/npm 10.9.8 satisfy package engines; no system replacements or global installs.
+- Small API module with runtime response validation and sanitized errors; library hook for request ordering, confirmed IDs, duplicate submission prevention, and explicit uncertain-outcome recovery; separate metadata-list component.
+- Refined warm-paper design, serif heading, sans-serif filenames, 13px metadata, responsive aligned rows, native file picker, compact upload form, and stronger empty-state upload emphasis.
+- Fixed local proxy and isolated trial launcher using a guarded temporary schema in `dra_test`. Backend source and behaviour unchanged.
+
+Verification on 15 October 2026:
+
+- **32 frontend component tests passed**, 0 failed/skipped. HTTP is mocked: success, FormData boundary handling, exact client byte boundary, validation, duplicate filenames, HTML-like filename escaping, keyboard order, stale list/initial responses, failed refresh after upload, malformed success/list responses, ambiguous network/server failures, refresh-before-explicit-retry, and timestamp/ID ordering.
+- TypeScript checks and production build passed. `npm ls --depth=0` passed; npm installation audit reported 0 known vulnerabilities.
+- Existing backend suite with PostgreSQL enabled: **69 passed**, 0 failed/skipped. Fixtures restricted mutations to verified `dra_test` schemas.
+- Real built-in browser: native file picker, four real synthetic uploads (including duplicate and long names), metadata listing, and persistence after page reload passed. Invalid UTF-8 produced a clear rejection and left the count at four. A fresh PostgreSQL connection independently verified committed rows, byte sizes, and exact synthetic text.
+- Browser inspection passed at 1440px, 390px, and 320px: wrapping, expanded Details, keyboard activation/focus, and no horizontal overflow. Generated captures remain local in ignored screenshot folders and are excluded from Git.
+- Type checking initially failed on an unsupported test-query option; corrected. The first component run had one faulty filename-length assertion (27 passed/1 failed); corrected to compare the full filename. Final runs passed. The first check started before dependency installation completed and could not find `tsc`; rerun successfully afterward.
+- Browser raw network instrumentation was declined by browser security policy and was not bypassed. Ordinary browser file upload worked; real HTTP status instrumentation was not separately captured. Race/failure injection is mocked, not real-browser fault injection. Native zoom and screen-reader behaviour remain unverified for React.
+
+User-reported manual verification on 17 October 2026:
+
+- Uploading and document listing worked.
+- Refresh and expandable Details worked.
+- Documents remained available after page reload.
+- No errors or layout problems were reported.
+
+This confirms the manual trial separately from the automated and agent-operated browser evidence above. The user did not report a separate screen-reader, zoom, or injected-failure audit; the previously recorded verification limits remain. Tests were not rerun for this documentation-only update.
+
+Milestone 2 has no remaining implementation work. Milestone 3 remains planned and has not started. Authentication, PDFs, AI, and public deployment are outside this milestone; keep both applications local.
 
 ## Later milestones
 
 | Milestone | Scope | Status |
 | --- | --- | --- |
-| 2 | Minimal React and TypeScript interface for uploading and listing documents | Planned |
+| 2 | Minimal React and TypeScript interface for uploading and listing documents | Complete |
 | 3 | User accounts and per-user document access | Planned |
 | 4 | PDF extraction with explicit handling of unsupported scanned PDFs | Planned |
 | 5 | Retrieval and document questions with verifiable citations | Planned |

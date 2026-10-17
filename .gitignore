@@ -24,3 +24,7 @@ uploads/
 
 # Local editor settings
 .vscode/settings.json
+
+# Local browser verification captures (keep design sources, not generated images)
+/docs/design/screenshots/
+/docs/design/prototypes/screenshots/

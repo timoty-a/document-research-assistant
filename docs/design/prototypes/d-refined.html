@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>D · Refined library — Design preview</title>
+<style>
+:root{--paper:#fbf8f1;--surface:#fffdf8;--ink:#262d29;--muted:#62695f;--teal:#155e54;--teal-light:#edf4ee;--line:#dcded2;--control:#7c8679;--error:#8e2f25;--error-bg:#fff1ec;--warning:#724a13;--warning-bg:#fff3d9;--mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;--sans:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}html{color-scheme:light}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 var(--sans)}button,select{font:inherit}button,select,summary,a{touch-action:manipulation}button{cursor:pointer}button,select{min-height:44px}a{color:inherit}button:focus-visible,a:focus-visible,select:focus-visible,summary:focus-visible,[tabindex="-1"]:focus-visible{outline:3px solid var(--teal);outline-offset:4px}button:disabled{cursor:default;color:#636c62;background:#e9ece5;border-color:#a4aea1}button[aria-disabled="true"]{cursor:default;color:var(--muted);background:#f0f1eb}button:not(:disabled):not([aria-disabled="true"]):hover{filter:brightness(.95)}[hidden]{display:none!important}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.skip{position:absolute;top:-100px;left:20px;background:white;padding:12px 18px;z-index:5}.skip:focus{top:14px}
+/* Design-review controls live outside the product surface. */
+.preview-tools{background:#edf0f3;color:#2d3946;border-bottom:1px solid #aab4c0;padding:14px max(22px,calc((100vw - 1200px)/2));font-size:12px}.preview-top,.preview-bottom{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.preview-top{margin-bottom:8px}.preview-title{font-weight:750;letter-spacing:.07em}.preview-nav{display:flex;gap:5px;flex-wrap:wrap}.preview-nav a{display:flex;align-items:center;min-height:44px;padding:7px 11px;text-decoration:none;border:1px solid transparent;border-radius:4px}.preview-nav a:hover{text-decoration:underline}.preview-nav [aria-current="page"]{background:white;border-color:#7f8b9a;font-weight:700}.preview-copy{margin:0;max-width:640px;line-height:1.6}.preview-settings{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.preview-settings label{font-weight:650}.preview-settings select{max-width:100%;padding:8px 30px 8px 10px;border:1px solid #778597;background:white;color:#2d3946;border-radius:4px}.preview-reset{background:transparent;border:0;color:#34475c;font-size:12px;text-decoration:underline;text-underline-offset:3px;padding:8px}
+/* Product */
+.page{max-width:1120px;margin:0 auto;padding:0 0 32px}.identity{display:flex;align-items:baseline;justify-content:space-between;gap:24px;padding:20px 0 17px;border-bottom:1px solid var(--line)}.wordmark{font:23px/1.2 Georgia,"Times New Roman",serif;letter-spacing:-.035em}.wordmark em{font-weight:400}.wordmark span{font-weight:600;margin-left:5px}.identity-caption{font-size:11px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}main{padding-top:27px}.intro{display:flex;align-items:center;justify-content:space-between;gap:28px;margin-bottom:21px}.eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:.17em;color:var(--muted);font-weight:750;margin:0 0 10px}h1{font:400 47px/1.08 Georgia,"Times New Roman",serif;letter-spacing:-.045em;margin:0 0 12px}h2,h3,p{margin-top:0}.intro-copy{font-size:15px;color:var(--muted);margin:0;max-width:530px}.button{display:inline-flex;align-items:center;justify-content:center;gap:9px;border:1px solid var(--control);border-radius:4px;padding:11px 17px;min-height:44px;font-size:13px;line-height:1.35;font-weight:600;background:var(--surface);color:var(--ink);white-space:nowrap}.primary{color:white;background:var(--teal);border-color:var(--teal)}.refresh{min-width:115px}.refresh svg{width:15px;height:15px;flex-shrink:0}.upload-section{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:14px 18px;display:grid;grid-template-columns:minmax(190px,1fr) minmax(0,1.4fr);gap:24px;align-items:center}.upload-section h2{font:650 16px/1.4 var(--sans);letter-spacing:-.015em;margin-bottom:6px}.upload-limits{font-size:13px;color:var(--muted);margin:0}.upload-controls{min-width:0}.upload-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px}.selected-file{font-size:13px;color:var(--muted);margin:7px 0 0;min-height:20px;text-align:right;overflow-wrap:anywhere}.selected-file strong{font-weight:500;color:var(--ink)}.selected-file .file-size{font-family:var(--mono);margin-left:7px;font-size:13px}.message{border-left:3px solid var(--teal);background:var(--teal-light);padding:13px 16px;font-size:13px;color:#284c40;overflow-wrap:anywhere}.message strong{display:block;font-size:13px;font-weight:650;margin-bottom:3px}.message p{margin:0;line-height:1.65}.message.error{background:var(--error-bg);border-color:var(--error);color:var(--error)}.message.warning{background:var(--warning-bg);border-color:#95691e;color:var(--warning)}.message.info{background:#f0f1eb;border-color:#778172;color:#4e5a4e}.message .button{margin-top:11px;background:transparent;color:inherit;border-color:currentColor;min-height:44px;font-size:12px}.upload-message{margin-top:14px}.library{margin-top:24px;min-width:0}.library-header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:12px}.library-tools{display:flex;align-items:center;gap:18px;flex-wrap:wrap}.library-header h2{font:650 17px/1.5 var(--sans);letter-spacing:-.02em;margin:0}.document-count{font:13px/1.5 var(--mono);color:var(--muted);margin:0}.library-message{margin-bottom:18px}.column-head,.record-summary{display:grid;grid-template-columns:minmax(0,1fr) 91px 151px 88px;gap:24px}.column-head{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);padding:0 20px 11px;border-bottom:1px solid #aeb7a9}.records{list-style:none;margin:0;padding:0}.records>li{border-bottom:1px solid var(--line)}.record{min-width:0;background:transparent}.record-summary{align-items:start;padding:23px 20px;cursor:pointer;list-style:none;min-height:88px;border-radius:2px}.record-summary::-webkit-details-marker{display:none}.record-summary::marker{content:''}.record-summary:hover{background:#f3f3e9}.record[open]>.record-summary{background:#f3f3e9}.document-name{display:flex;align-items:flex-start;gap:13px;min-width:0;font-size:15px;font-weight:550;line-height:1.5}.filename{min-width:0;overflow-wrap:anywhere}.file-icon{width:18px;height:23px;color:#677c6b;flex-shrink:0;margin-top:1px}.meta{font:13px/1.65 var(--mono);font-variant-numeric:tabular-nums;color:#445042;min-width:0}.meta-label{display:none}.time{display:block;font-size:13px;color:var(--muted);margin-top:2px}.details-label{display:flex;align-items:center;justify-content:flex-end;gap:8px;font-size:13px;color:var(--teal);min-height:44px;margin-top:-9px}.details-label svg{width:12px;height:12px;flex-shrink:0}.record[open] .details-label svg{transform:rotate(180deg)}.record-expanded{padding:12px 20px 22px 51px;background:#f3f3e9}.record-expanded dl{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:22px;margin:0;max-width:680px}.record-expanded dt{font:13px/1.5 var(--sans);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px}.record-expanded dd{font:13px/1.65 var(--mono);margin:0;overflow-wrap:anywhere}.new-record{box-shadow:inset 3px 0 0 var(--teal);background:#f0f5ed}.library-foot{font-size:13px;color:var(--muted);margin:17px 0 0}.state-panel{padding:54px 22px;text-align:center;border-bottom:1px solid var(--line)}.state-panel h3{font:400 29px/1.2 Georgia,serif;letter-spacing:-.03em;margin:0 0 12px}.state-panel p{color:var(--muted);font-size:14px;max-width:370px;margin:0 auto;line-height:1.7}.state-panel .button{margin-top:21px}.skeleton{display:grid;gap:22px;max-width:760px;margin:0 auto 30px}.skeleton span{display:block;height:13px;background:#e2e5da;border-radius:2px;width:78%}.skeleton span:nth-child(2){width:96%}.skeleton span:nth-child(3){width:65%}
+@media(max-width:1200px){.page{margin-inline:36px}}
+@media(max-width:850px){.upload-section{grid-template-columns:minmax(190px,1fr) minmax(0,1.35fr);gap:20px}.column-head,.record-summary{grid-template-columns:minmax(0,1fr) 72px 128px 70px;gap:18px}.upload-actions{flex-wrap:wrap}.button{padding-inline:14px}}
+@media(max-width:700px){.page{margin-inline:22px}.identity{padding:16px 0 14px;gap:12px}.wordmark{font-size:22px}.identity-caption{font-size:10px;max-width:65px;text-align:right}main{padding-top:21px}.intro{align-items:flex-start;gap:16px;margin-bottom:18px}h1{font-size:37px}.intro-copy{font-size:14px}.refresh{min-width:44px;padding-inline:11px;font-size:12px}.upload-section{grid-template-columns:1fr;gap:12px;padding:14px}.upload-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.upload-actions .button{white-space:normal;padding:10px 8px}.selected-file{text-align:left;margin-top:7px}.library{margin-top:20px}.library-header{margin-bottom:8px;gap:10px}.library-tools{gap:10px}.column-head{display:none}.record-summary{grid-template-columns:minmax(0,1fr) minmax(0,1.5fr) auto;gap:14px;padding:22px 6px}.document-name{grid-column:1/-1;font-size:15px}.meta{font-size:13px}.meta-label{display:block;color:var(--muted);font:13px/1.4 var(--sans);letter-spacing:.09em;text-transform:uppercase;margin-bottom:4px}.details-label{margin-top:10px;align-self:end;min-height:44px;font-size:13px}.record-expanded{padding:12px 16px 22px 6px}.record-expanded dl{grid-template-columns:1fr;gap:14px}.new-record>.record-summary{padding-left:12px}.preview-tools{padding:12px 18px}.preview-settings{width:100%}.preview-settings select{flex:1;min-width:0;width:100%}.preview-nav a{padding:7px 9px}.preview-title{max-width:100%;font-size:11px}.preview-copy{font-size:12px}.preview-reset{padding-inline:4px}.state-panel{padding:42px 10px}}
+@media(max-width:440px){.intro{display:block}h1{font-size:34px}.upload-limits{font-size:13px}.library-header h2{font-size:16px}.document-count{font-size:13px}.wordmark{font-size:21px}}
+.is-empty .upload-section{padding:26px 24px;gap:24px;border-color:var(--control)}.is-empty .upload-section h2{font-size:19px}.is-empty .upload-section .upload-actions{gap:12px}
+@media(max-width:700px){.is-empty .upload-section{padding:24px 18px;gap:20px}.is-empty .upload-actions{grid-template-columns:1fr}.library-tools .refresh{font-size:13px;min-width:44px}.library-header h2{flex:1}.library-tools{justify-content:flex-end}}
+@media(max-width:360px){.library-header{gap:8px}.library-tools{gap:8px;flex-wrap:nowrap}.library-tools #refresh-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<a class="skip" href="#library">Skip to document library</a>
+<aside class="preview-tools" aria-label="Prototype controls">
+  <div class="preview-top"><span class="preview-title">DESIGN PREVIEW / D · REFINED LIBRARY</span><nav class="preview-nav" aria-label="Design directions"><a href="index.html">All directions</a><a href="a-ledger.html">A · Ledger</a><a href="b-catalogue.html">B · Catalogue</a><a href="c-shelf.html">C · Shelf</a><a href="d-refined.html" aria-current="page">D · Refined</a></nav></div>
+  <div class="preview-bottom"><p class="preview-copy">Sample data only. Choose file selects a synthetic document; Upload simulates a successful save. Refresh simulates a list update. No files are read or sent. Use Scenes to inspect other outcomes.</p><div class="preview-settings"><label for="preview-state">Scene</label><select id="preview-state"><option value="populated">Populated library</option><option value="empty">Empty library</option><option value="initial-loading">Initial loading</option><option value="initial-error">Initial load failed</option><option value="refreshing">Refreshing existing list</option><option value="refresh-error">Refresh failed — keep rows</option><option value="refresh-complete">Refresh complete</option><option value="uploading">Upload in progress</option><option value="success">Upload succeeded — add record</option><option value="rejected">Upload rejected — not saved</option><option value="uncertain">Upload outcome uncertain</option></select><button class="preview-reset" id="reset-preview" type="button">Reset</button></div></div>
+</aside>
+<div class="page">
+  <header class="identity"><div class="wordmark" aria-label="Document Research"><em>document</em><span>research</span></div><span class="identity-caption">Source library</span></header>
+  <main>
+    <header class="intro"><div><p class="eyebrow">A place for your sources</p><h1>Document library.</h1><p class="intro-copy">Keep the material behind your work together.</p></div></header>
+    <section class="upload-section" aria-labelledby="upload-heading"><div><h2 id="upload-heading">Add a text document</h2><p class="upload-limits" id="upload-limits">.txt files · UTF-8 text · Up to 1 MiB per file</p></div><div class="upload-controls" role="group" aria-labelledby="upload-heading" aria-describedby="upload-limits"><div class="upload-actions"><button class="button" id="choose-file" type="button">Choose a file</button><button class="button primary" id="upload" type="button" disabled>Upload document</button></div><p class="selected-file" id="selected-file" role="status">No file selected</p></div></section>
+    <section class="message upload-message" id="upload-message" role="status" hidden><strong id="upload-message-title"></strong><p id="upload-message-text"></p><button class="button" id="check-library" type="button" hidden>Refresh library</button></section>
+    <section class="library" id="library" aria-labelledby="library-heading" tabindex="-1"><div class="library-header"><h2 id="library-heading">Your documents</h2><div class="library-tools"><p class="document-count" id="document-count">5 documents</p><button type="button" class="button refresh" id="refresh"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M16 7a6.5 6.5 0 1 0 .4 5M16 3v4h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="refresh-label">Refresh</span></button></div></div><section class="message library-message" id="library-message" role="status" hidden><strong id="library-message-title"></strong><p id="library-message-text"></p><button class="button" id="retry-refresh" type="button" hidden>Try refreshing again</button></section><div id="library-body"><div class="column-head" id="column-head" aria-hidden="true"><span>Document</span><span>Size</span><span>Added</span><span>Metadata</span></div><ol class="records" id="records"></ol></div><div class="state-panel" id="state-panel" hidden></div><p class="library-foot">Text documents only · Times shown in WAT</p></section>
+  </main>
+</div>
+<noscript><p style="padding:24px">Enable JavaScript to display the sample records and preview states. This is a standalone design preview, not a connected application.</p></noscript>
+<script>
+const sampleDocuments = [{"id": "c2158240-1860-4416-8f9d-f1fe537ce001", "name": "research-question-notes.txt", "bytes": 4812, "iso": "2026-10-13T09:10:00Z", "date": "13 Oct 2026", "time": "10:10 WAT"}, {"id": "c2158240-1860-4416-8f9d-f1fe537ce002", "name": "interview-transcript.txt", "bytes": 18640, "iso": "2026-10-13T11:25:00Z", "date": "13 Oct 2026", "time": "12:25 WAT"}, {"id": "c2158240-1860-4416-8f9d-f1fe537ce003", "name": "interview-transcript.txt", "bytes": 22976, "iso": "2026-10-14T08:45:00Z", "date": "14 Oct 2026", "time": "09:45 WAT"}, {"id": "c2158240-1860-4416-8f9d-f1fe537ce004", "name": "literature-review_remote-learning_outcomes_and_methodological_limitations_2026.txt", "bytes": 68402, "iso": "2026-10-14T14:20:00Z", "date": "14 Oct 2026", "time": "15:20 WAT"}, {"id": "c2158240-1860-4416-8f9d-f1fe537ce005", "name": "working-conclusions.txt", "bytes": 3216, "iso": "2026-10-15T08:05:00Z", "date": "15 Oct 2026", "time": "09:05 WAT"}];
+const pendingDocument = {id:'c2158240-1860-4416-8f9d-f1fe537ce006',name:'methods-summary.txt',bytes:6240,iso:'2026-10-15T09:20:00Z',date:'15 Oct 2026',time:'10:20 WAT'};
+const $ = selector => document.querySelector(selector);
+const scene = $('#preview-state');
+let rows = [...sampleDocuments];
+let selection = null;
+let uploadState = 'idle';
+let listState = 'ready';
+let knownLibrary = true;
+let newId = null;
+let nextId = 6;
+let uploadTimer = null;
+let refreshTimer = null;
+const escapeText = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fileIcon = '<svg class="file-icon" aria-hidden="true" viewBox="0 0 20 25" fill="none"><path d="M3 1h9l5 5v18H3zM12 1v6h5M6 12h8M6 16h8" stroke="currentColor" stroke-width="1.2"/></svg>';
+const chevron = '<svg aria-hidden="true" viewBox="0 0 12 12" fill="none"><path d="m3 4.5 3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function cancelTimers(){clearTimeout(uploadTimer);clearTimeout(refreshTimer);uploadTimer=refreshTimer=null;}
+function renderRecords(){
+  $('#records').innerHTML=rows.map(d=>`<li><details class="record${d.id===newId?' new-record':''}"><summary class="record-summary"><span class="document-name">${fileIcon}<span class="filename">${escapeText(d.name)}</span></span><span class="meta"><span class="meta-label" aria-hidden="true">Size</span><span class="sr-only">File size: </span>${(d.bytes/1024).toFixed(1)} KiB</span><span class="meta"><span class="meta-label" aria-hidden="true">Added</span><span class="sr-only">Added: </span><time datetime="${d.iso}">${d.date}<span class="time">${d.time}</span></time></span><span class="details-label">Details ${chevron}</span></summary><div class="record-expanded"><dl><div><dt>Record ID</dt><dd>${escapeText(d.id)}</dd></div><div><dt>Exact file size</dt><dd>${d.bytes.toLocaleString('en-GB')} bytes</dd></div></dl></div></details></li>`).join('');
+}
+function message(prefix,title,text,kind='',action=false){
+  const box=$('#'+prefix+'-message');
+  box.hidden=!title;
+  box.className='message '+prefix+'-message'+(kind?' '+kind:'');
+  box.setAttribute('role',kind==='error'||kind==='warning'?'alert':'status');
+  $('#'+prefix+'-message-title').textContent=title;
+  $('#'+prefix+'-message-text').textContent=text;
+  $(prefix==='upload'?'#check-library':'#retry-refresh').hidden=!action;
+}
+function render(){
+  $('.page').classList.toggle('is-empty',knownLibrary&&rows.length===0);
+  const initial=listState==='initial-loading';
+  const initialError=listState==='initial-error';
+  const refreshing=listState==='refreshing';
+  const busyUpload=uploadState==='uploading';
+  const unknown=uploadState==='uncertain';
+  $('#choose-file').disabled=busyUpload||unknown||!knownLibrary;
+  $('#upload').disabled=!selection||busyUpload||unknown||uploadState==='success'||!knownLibrary;
+  $('#upload').textContent=busyUpload?'Uploading…':uploadState==='success'?'Saved':uploadState==='retry-ready'?'Upload again':'Upload document';
+  $('#choose-file').textContent=uploadState==='success'?'Choose another file':'Choose a file';
+  $('#selected-file').innerHTML=selection?`<strong>${escapeText(selection.name)}</strong><span class="file-size">${(selection.bytes/1024).toFixed(1)} KiB</span>`:'No file selected';
+  $('#refresh').setAttribute('aria-disabled',String(initial||refreshing||busyUpload));
+  $('#refresh-label').textContent=initial?'Loading…':refreshing?'Refreshing…':'Refresh';
+  $('#check-library').disabled=refreshing;
+  $('#check-library').textContent=refreshing?'Refreshing…':'Refresh library';
+  $('#document-count').textContent=knownLibrary?`${rows.length} ${rows.length===1?'document':'documents'}`:initial?'Loading…':'Not loaded';
+  $('#library-body').hidden=!knownLibrary||rows.length===0;
+  // Only initial loading hides the library. Existing records stay available
+  // throughout a refresh, including their open Details and keyboard focus.
+  $('#state-panel').hidden=knownLibrary&&rows.length>0;
+  if(initial) $('#state-panel').innerHTML='<div class="skeleton" aria-hidden="true"><span></span><span></span><span></span></div><h3>Gathering your library.</h3><p>Loading your saved documents…</p>';
+  else if(initialError) $('#state-panel').innerHTML='<h3>Your library couldn’t be loaded.</h3><p>Try refreshing to see your documents. A connection problem doesn’t mean your library is empty.</p>';
+  else if(knownLibrary&&rows.length===0) $('#state-panel').innerHTML='<h3>Start with your first source.</h3><p>Add a text document. Its filename, size and upload time will appear here.</p><button class="button" id="empty-choose" type="button">Choose a text file</button>';
+  const name=selection?selection.name:pendingDocument.name;
+  if(busyUpload) message('upload','Saving your document',`Uploading “${name}”. Please wait.`,'info');
+  else if(uploadState==='success') message('upload','Document saved',`“${name}” is now in your library.`);
+  else if(uploadState==='rejected') message('upload','File not saved',`“${name}” was rejected because it isn’t valid UTF-8 text. Choose a UTF-8 .txt file and try again.`,'error');
+  else if(unknown) message('upload','Save not confirmed',`Saving “${name}” could not be confirmed. It may have been saved. Refresh your library before trying again.`,'warning',true);
+  else if(uploadState==='retry-ready') message('upload','Review before retrying','Your library was refreshed. Check the filenames, sizes and times before uploading again; another upload may create a duplicate.','warning');
+  else message('upload','','');
+  if(refreshing) message('library','Refreshing your library','Your existing documents remain available while the list is updated.','info');
+  else if(listState==='refresh-error') message('library','Couldn’t refresh','Showing your previously loaded documents. Please try refreshing again.','error',true);
+  else if(initial) message('library','Loading your library','Please wait while your documents are loaded.','info');
+  else if(initialError) message('library','Couldn’t load your library','Your saved documents have not been removed. Please try again.','error',true);
+  else if(listState==='refreshed') message('library','Library refreshed','Your document list is up to date.');
+  else message('library','','');
+}
+function selectSample(){
+  if($('#choose-file').disabled) return;
+  selection={...pendingDocument,id:pendingDocument.id.slice(0,-3)+String(nextId++).padStart(3,'0')};
+  uploadState='selected';
+  render();
+}
+function startUpload(){
+  if($('#upload').disabled) return;
+  const submitted={...selection};
+  uploadState='uploading';
+  scene.value='uploading';
+  render();
+  // This timer changes sample data only. There is no file access or network call.
+  uploadTimer=setTimeout(()=>{
+    uploadTimer=null;
+    if(!rows.some(d=>d.id===submitted.id)) rows.push(submitted);
+    rows.sort((a,b)=>a.iso.localeCompare(b.iso)||a.id.localeCompare(b.id));
+    newId=submitted.id;
+    uploadState='success';
+    scene.value='success';
+    renderRecords();render();
+  },1000);
+}
+function startRefresh(event){
+  if(['initial-loading','refreshing'].includes(listState)||uploadState==='uploading') return;
+  listState=knownLibrary?'refreshing':'initial-loading';
+  scene.value=knownLibrary?'refreshing':'initial-loading';
+  render();
+  if(event&&['retry-refresh','check-library'].includes(event.currentTarget.id)) $('#refresh').focus();
+  refreshTimer=setTimeout(()=>{
+    refreshTimer=null;
+    if(!knownLibrary){rows=[...sampleDocuments];knownLibrary=true;renderRecords();}
+    listState='refreshed';
+    scene.value='refresh-complete';
+    if(uploadState==='uncertain') uploadState='retry-ready';
+    // Never infer that an uncertain upload succeeded from a filename match,
+    // and never resubmit it. A retry requires a separate, explicit action.
+    render();
+  },900);
+}
+function preview(mode){
+  cancelTimers();
+  scene.value=mode;
+  if(['refreshing','refresh-error','refresh-complete'].includes(mode)){
+    if(!knownLibrary){knownLibrary=true;rows=[...sampleDocuments];renderRecords();}
+    listState=mode==='refresh-complete'?'refreshed':mode;
+    if(mode==='refresh-complete'&&uploadState==='uncertain') uploadState='retry-ready';
+    render();
+    return;
+  }
+  rows=[...sampleDocuments];selection=null;uploadState='idle';listState='ready';knownLibrary=true;newId=null;nextId=6;
+  if(mode==='empty') rows=[];
+  if(mode==='initial-loading'||mode==='initial-error'){rows=[];knownLibrary=false;listState=mode;}
+  if(['uploading','success','rejected','uncertain'].includes(mode)){
+    selection={...pendingDocument};nextId=7;uploadState=mode;
+    if(mode==='success'){rows.push({...pendingDocument});newId=pendingDocument.id;}
+  }
+  renderRecords();render();
+}
+scene.addEventListener('change',()=>preview(scene.value));
+$('#reset-preview').addEventListener('click',()=>preview('populated'));
+$('#choose-file').addEventListener('click',selectSample);
+$('#upload').addEventListener('click',startUpload);
+$('#refresh').addEventListener('click',startRefresh);
+$('#check-library').addEventListener('click',startRefresh);
+$('#retry-refresh').addEventListener('click',startRefresh);
+$('#state-panel').addEventListener('click',event=>{if(event.target.closest('#empty-choose')){selectSample();$('#upload').focus();}});
+window.addEventListener('pagehide',cancelTimers);
+preview('populated');
+</script>
+</body>
+</html>
