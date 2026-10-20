@@ -12,12 +12,12 @@ pytestmark = pytest.mark.database
 def test_migrated_schema(db_connection):
     inspector = inspect(db_connection)
     columns = {column["name"]: column for column in inspector.get_columns("documents")}
-    assert set(columns) == {"id", "original_filename", "content", "original_byte_size", "created_at", "owner_id"}
+    assert set(columns) == {"id", "original_filename", "content", "original_byte_size", "created_at", "owner_id", "source_format", "source_pdf", "page_count", "extraction_version"}
     assert columns["owner_id"]["nullable"]
-    assert all(not column["nullable"] for name, column in columns.items() if name != "owner_id")
+    assert all(not column["nullable"] for name, column in columns.items() if name not in {"owner_id", "source_pdf", "page_count", "extraction_version"})
     assert inspector.get_pk_constraint("documents")["constrained_columns"] == ["id"]
     assert columns["created_at"]["type"].timezone is True
-    assert len(inspector.get_check_constraints("documents")) == 5
+    assert len(inspector.get_check_constraints("documents")) == 7
 
 
 @pytest.mark.parametrize("content", ["  héllo\n", "x" * 1048576])

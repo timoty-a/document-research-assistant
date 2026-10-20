@@ -68,7 +68,7 @@ export function useLibrary(session: LibrarySession) {
       confirmed.current.set(saved.id, saved);
       setDocuments(previous => reconcile(previous ?? [], [saved]));
       setNewId(saved.id); updateStatus('success');
-      setUploadMessage(`“${saved.original_filename}” is now in your library.`);
+      setUploadMessage(`“${saved.original_filename}” is now in your library.${saved.textless_pages.length ? ` Some content was not extracted: no text on PDF pages ${saved.textless_pages.join(', ')}. See Details.` : ''}`);
     } catch (error) {
       if (!mounted.current || !session.isCurrent()) return;
       const safe = error instanceof ApiError ? error : new ApiError('uncertain', 'Saving could not be confirmed. Refresh your library before retrying.');

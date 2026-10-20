@@ -20,7 +20,8 @@ class AuthBoundary:
 
     async def __call__(self, scope, receive, send):
         path = scope.get("path", "").rstrip("/")
-        private = path == "/documents" or path.startswith("/auth/")
+        protected = path == "/documents" or path.startswith("/documents/") or path.startswith("/research/")
+        private = protected or path.startswith("/auth/")
         if scope["type"] != "http" or not private:
             return await self.app(scope, receive, send)
         request = Request(scope, receive)
@@ -28,7 +29,7 @@ class AuthBoundary:
         identity = None
         try:
             origin = request.headers.get("origin")
-            if path == "/documents" and request.method in {"GET", "POST"}:
+            if protected and request.method in {"GET", "POST"}:
                 # Authenticate first, including unauthorized POST with a bogus Origin.
                 identity = await run_in_threadpool(service.authenticate, state.engine, state.settings,
                                                   request.cookies.get(service.COOKIE), state.clock, touch=False)
@@ -36,7 +37,7 @@ class AuthBoundary:
             if request.method not in {"GET", "HEAD", "OPTIONS"}:
                 if origin not in service.ORIGINS:
                     raise service.forbidden()
-                if path == "/documents" and request.method == "POST":
+                if protected and request.method == "POST":
                     service.check_csrf(identity, request.headers.get("x-csrf-token"))
                 elif path in {"/auth/login", "/auth/register"}:
                     def check():

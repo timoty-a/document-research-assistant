@@ -17,7 +17,7 @@ export function DocumentList({ documents, newId }: { documents: DocumentMetadata
           <span className="meta"><span className="meta-label" aria-hidden="true">Added</span><span className="sr-only">Added: </span><time dateTime={d.created_at}>{dateFormat.format(new Date(d.created_at))}<span className="time">{timeFormat.format(new Date(d.created_at))} WAT</span></time></span>
           <span className="details-label">Details <svg aria-hidden="true" viewBox="0 0 12 12" fill="none"><path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.3" /></svg></span>
         </summary>
-        <div className="record-expanded"><dl><div><dt>Record ID</dt><dd>{d.id}</dd></div><div><dt>Exact file size</dt><dd>{d.byte_size.toLocaleString('en-GB')} bytes</dd></div></dl></div>
+        <div className="record-expanded"><dl><div><dt>Format</dt><dd>{d.source_format === 'pdf' ? `PDF · ${d.page_count} ${d.page_count === 1 ? 'page' : 'pages'}` : 'UTF-8 TXT'}</dd></div>{d.textless_pages.length > 0 && <div><dt>Extraction warning</dt><dd>No text was extracted on PDF pages {d.textless_pages.join(', ')}. Some content may be missing; images are not read.</dd></div>}<div><dt>Record ID</dt><dd>{d.id}</dd></div><div><dt>Exact file size</dt><dd>{d.byte_size.toLocaleString('en-GB')} bytes</dd></div></dl></div>
       </details>
     </li>)}</ol></>;
 }

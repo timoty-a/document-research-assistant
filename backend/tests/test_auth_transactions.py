@@ -49,7 +49,7 @@ def test_migration_preserves_populated_legacy_and_refuses_downgrade(test_setting
                     command.downgrade(config, "0001_documents")
             with database.engine.connect() as connection:
                 assert connection.scalar(select(Document.content)) == before["content"]
-                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0002_auth"
+                assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0003_pdf_documents"
         finally:
             browser.client.close(); browser.app.state.engine.dispose()
 

@@ -90,7 +90,8 @@ def test_settings(request):
     if local.test_db_password is None:
         pytest.fail("TEST_DB_PASSWORD is required for explicit database tests")
     return Settings(_env_file=None, app_env="test", db_host=local.db_host, db_port=local.db_port,
-                    db_name="dra_test", db_user="dra_test", db_password=local.test_db_password)
+                    db_name="dra_test", db_user="dra_test", db_password=local.test_db_password,
+                    ai_enabled=False, groq_api_key=None)
 
 
 @pytest.fixture(scope="session")

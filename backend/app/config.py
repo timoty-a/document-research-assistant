@@ -25,6 +25,17 @@ class Settings(BaseSettings):
     db_user: Literal["dra_dev", "dra_test"] = "dra_dev"
     db_password: SecretStr
     test_db_password: SecretStr | None = None
+    # Disabled until the user explicitly configures a private Groq free-plan key.
+    ai_enabled: bool = False
+    groq_api_key: SecretStr | None = None
+
+    @model_validator(mode="after")
+    def require_ai_key(self) -> "Settings":
+        if self.ai_enabled and (self.groq_api_key is None or not self.groq_api_key.get_secret_value().strip()
+                                or self.groq_api_key.get_secret_value().startswith("REPLACE_")):
+            raise ValueError("Configure a private Groq API key before enabling AI")
+        return self
+
 
     @field_validator("db_password", "test_db_password")
     @classmethod

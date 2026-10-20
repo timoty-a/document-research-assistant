@@ -10,7 +10,7 @@ from sqlalchemy.exc import OperationalError
 from app.documents.models import Document
 
 pytestmark = pytest.mark.database
-METADATA_KEYS = {"id", "original_filename", "byte_size", "created_at"}
+METADATA_KEYS = {"id", "original_filename", "byte_size", "created_at", "source_format", "page_count", "textless_pages"}
 
 
 def request(app, method, path="/documents", **kwargs):
@@ -87,7 +87,7 @@ def test_deterministic_ordering_and_metadata_projection(api_database):
     ("empty.txt", b"", 400, "non-whitespace"),
     ("space.txt", b" \t\r\n", 400, "non-whitespace"),
     ("unicode.txt", "\u2003\u00a0".encode(), 400, "non-whitespace"),
-    ("wrong.pdf", b"synthetic", 400, ".txt"),
+    ("wrong.exe", b"synthetic", 400, ".txt"),
     ("invalid.txt", b"\xff\xfe", 400, "UTF-8"),
     ("null.txt", b"a\x00b", 400, "null"),
     ("large.txt", b"x" * 1048577, 413, "1,048,576"),

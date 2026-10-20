@@ -6,6 +6,9 @@ export interface DocumentMetadata {
   original_filename: string;
   byte_size: number;
   created_at: string;
+  source_format: 'txt' | 'pdf';
+  page_count: number | null;
+  textless_pages: number[];
 }
 
 export class ApiError extends Error {
@@ -15,8 +18,8 @@ export class ApiError extends Error {
 }
 
 export function fileProblem(file: File): string | null {
-  if (!file.name.toLowerCase().endsWith('.txt')) return 'Choose a .txt file.';
-  if (file.size === 0) return 'Choose a non-empty text file.';
+  if (!/\.(txt|pdf)$/i.test(file.name)) return 'Choose a .txt or .pdf file.';
+  if (file.size === 0) return 'Choose a non-empty document.';
   if (file.size > MAX_BYTES) return 'Choose a file no larger than 1 MiB (1,048,576 bytes).';
   return null;
 }
@@ -25,15 +28,27 @@ function metadata(value: unknown): DocumentMetadata {
   if (!value || typeof value !== 'object') throw new Error('Invalid metadata');
   const d = value as Record<string, unknown>;
   if (typeof d.id !== 'string' || !/^[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/i.test(d.id) ||
-      typeof d.original_filename !== 'string' || !d.original_filename.toLowerCase().endsWith('.txt') ||
+      typeof d.original_filename !== 'string' || !(/\.(txt|pdf)$/i.test(d.original_filename)) ||
       d.original_filename.includes('\0') || typeof d.byte_size !== 'number' ||
       !Number.isSafeInteger(d.byte_size) || d.byte_size < 1 || d.byte_size > MAX_BYTES ||
       typeof d.created_at !== 'string' ||
       !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?(?:Z|[+-]\d\d:\d\d)$/.test(d.created_at) ||
       !Number.isFinite(Date.parse(d.created_at))) throw new Error('Invalid metadata');
+  if (d.source_format !== 'txt' && d.source_format !== 'pdf') throw new Error('Invalid format');
+  if (!d.original_filename.toLowerCase().endsWith(`.${d.source_format}`) || !Array.isArray(d.textless_pages)) throw new Error('Invalid provenance');
+  const pages: unknown[] = d.textless_pages;
+  if (d.source_format === 'txt') {
+    if (d.page_count !== null || d.textless_pages.length !== 0) throw new Error('Invalid text metadata');
+  } else {
+    if (!Number.isInteger(d.page_count) || (d.page_count as number) < 1 || (d.page_count as number) > 100 ||
+        d.textless_pages.length >= (d.page_count as number) ||
+        d.textless_pages.some((page: unknown, i: number) => !Number.isInteger(page) || (page as number) < 1 ||
+          (page as number) > (d.page_count as number) || (i > 0 && (pages[i - 1] as number) >= (page as number)))) throw new Error('Invalid page metadata');
+  }
   // Copy only public metadata. Never forward an unexpected response field to UI state.
   return { id: d.id.toLowerCase(), original_filename: d.original_filename,
-    byte_size: d.byte_size, created_at: d.created_at };
+    byte_size: d.byte_size, created_at: d.created_at, source_format: d.source_format,
+    page_count: d.page_count as number | null, textless_pages: [...d.textless_pages] };
 }
 
 export async function listDocuments(session: LibrarySession): Promise<DocumentMetadata[]> {
@@ -66,10 +81,23 @@ export async function uploadDocument(file: File, session: LibrarySession): Promi
     // These validation responses definitively reject this API's upload. Do not
     // display arbitrary server details: they may contain filenames or internals.
     const rejection: Record<number, string> = {
-      400: 'File not saved. Use non-empty UTF-8 .txt text without null characters and a valid filename.',
+      400: 'File not saved. Use non-empty UTF-8 .txt text or a supported text-based PDF with a valid filename.',
       413: 'File not saved. The maximum size is 1 MiB (1,048,576 bytes).',
-      422: 'File not saved. Choose one text file and try again.',
+      422: 'File not saved. Choose one document and try again.',
     };
+    if ([400, 413].includes(response.status)) {
+      let body: unknown;
+      try { body = await response.json(); } catch { /* Use fixed fallback below. */ }
+      const code = body && typeof body === 'object' ? (body as Record<string, unknown>).error : null;
+      const pdfErrors: Record<string, { status: number; message: string }> = {
+        pdf_encrypted: { status: 400, message: 'File not saved. Encrypted PDFs are not supported. Export an unencrypted copy.' },
+        pdf_no_text: { status: 400, message: 'File not saved. No usable text was extracted. Scanned PDFs without a text layer need OCR, which is unavailable here.' },
+        pdf_invalid: { status: 400, message: 'File not saved. The PDF could not be read safely. Export a valid, unencrypted text-based PDF.' },
+        pdf_limit_exceeded: { status: 413, message: 'File not saved. The PDF exceeds the 100-page, extracted-text or processing limits.' },
+      };
+      const known = typeof code === 'string' && Object.hasOwn(pdfErrors, code) ? pdfErrors[code] : undefined;
+      if (known?.status === response.status) throw new ApiError('rejected', known.message);
+    }
     if (rejection[response.status]) throw new ApiError('rejected', rejection[response.status]);
     if (response.status !== 201) throw new Error('Unconfirmed save');
     const saved = metadata(await response.json());

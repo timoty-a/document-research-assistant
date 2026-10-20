@@ -1,4 +1,5 @@
-import { useRef, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
+import { ResearchWorkspace } from './ResearchWorkspace';
 import { DocumentList, formatSize } from './DocumentList';
 import { fileProblem } from './api';
 import { AuthForm } from './AuthForm';
@@ -10,6 +11,7 @@ function Message({ title, children, kind = '', id }: { title: string; children: 
 }
 export function AuthenticatedLibrary({ session }: { session: LibrarySession }) {
   const library = useLibrary(session);
+  const [researchOpen, setResearchOpen] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const refreshButton = useRef<HTMLButtonElement>(null);
   const { documents, loading, listError, refreshed, file, uploadStatus, uploadMessage, newId } = library;
@@ -27,16 +29,17 @@ export function AuthenticatedLibrary({ session }: { session: LibrarySession }) {
       <main id="main">
         <header className="intro"><div><p className="eyebrow">A place for your sources</p><h1>Document library.</h1><p className="intro-copy">Keep the material behind your work together.</p></div></header>
         <form className="upload-section" aria-labelledby="upload-heading" aria-describedby={`upload-limits${uploadMessage ? ' upload-feedback' : ''}`} onSubmit={e => { e.preventDefault(); void library.upload(); }}>
-          <div><h2 id="upload-heading">Add a text document</h2><p className="upload-limits" id="upload-limits">.txt files · UTF-8 text · Up to 1 MiB per file</p></div>
+          <div><h2 id="upload-heading">Add a document</h2><p className="upload-limits" id="upload-limits">UTF-8 TXT or text-based PDF · Up to 1 MiB per file</p></div>
           <div className="upload-controls">
-            <input ref={picker} id="document-file" className="sr-only" type="file" accept=".txt,text/plain" aria-label="Choose a text document" aria-describedby="upload-limits selected-file" disabled={busy || uncertain} onClick={e => { e.currentTarget.value = ''; }} onChange={e => library.choose(e.currentTarget.files?.[0] ?? null)} />
-            <div className="upload-actions"><button className="button" type="button" disabled={busy || uncertain} onClick={openPicker}>{uploadStatus === 'success' ? 'Choose another file' : 'Choose a file'}</button><button className="button primary" type="submit" disabled={uploadDisabled}>{busy ? 'Uploading…' : uploadStatus === 'success' ? 'Saved' : uploadStatus === 'retry-ready' ? 'Upload again' : 'Upload document'}</button></div>
+            <input ref={picker} id="document-file" className="sr-only" type="file" accept=".txt,.pdf,text/plain,application/pdf" aria-label="Choose a document" aria-describedby="upload-limits selected-file" disabled={busy || uncertain} onClick={e => { e.currentTarget.value = ''; }} onChange={e => library.choose(e.currentTarget.files?.[0] ?? null)} />
+            <div className="upload-actions"><button className="button" type="button" disabled={busy || uncertain} onClick={openPicker}>{uploadStatus === 'success' ? 'Choose another file' : 'Choose a file'}</button><button className="button primary" type="submit" disabled={uploadDisabled}>{busy ? 'Processing and saving…' : uploadStatus === 'success' ? 'Saved' : uploadStatus === 'retry-ready' ? 'Upload again' : 'Upload document'}</button></div>
             <p className="selected-file" id="selected-file" role="status">{file ? <><strong>{file.name}</strong><span className="file-size">{formatSize(file.size)}</span></> : 'No file selected'}</p>
           </div>
         </form>
         {uploadMessage && <div className="upload-message"><Message id="upload-feedback" title={uploadStatus === 'success' ? 'Document saved' : uncertain ? 'Save not confirmed' : uploadStatus === 'retry-ready' ? 'Review before retrying' : busy ? 'Saving your document' : 'File not saved'} kind={uncertain || uploadStatus === 'retry-ready' ? 'warning' : uploadStatus === 'rejected' ? 'error' : busy ? 'info' : ''}>
           <p>{uploadMessage}</p>{uncertain && <button className="button" type="button" disabled={loading} onClick={refreshFromMessage}>{loading ? 'Refreshing…' : 'Refresh library'}</button>}
         </Message></div>}
+        <p className="upload-limits pdf-notice">PDFs: up to 100 pages. Images are not read; extracted text may have reading-order or OCR errors.</p>
         <section className="library" id="library" aria-labelledby="library-heading" tabIndex={-1}>
           <div className="library-header"><h2 id="library-heading">Your documents</h2><div className="library-tools"><p className="document-count">{documents ? `${documents.length} ${documents.length === 1 ? 'document' : 'documents'}` : loading ? 'Loading…' : 'Not loaded'}</p><button ref={refreshButton} className="button refresh" type="button" aria-disabled={loading || busy} onClick={() => { if (!loading && !busy) void library.refresh(); }}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M16 7a6.5 6.5 0 1 0 .4 5M16 3v4h-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg><span id="refresh-label">{loading ? initial ? 'Loading…' : 'Refreshing…' : 'Refresh'}</span></button></div></div>
           <div className="library-message">
@@ -46,9 +49,10 @@ export function AuthenticatedLibrary({ session }: { session: LibrarySession }) {
           </div>
           {!!documents?.length && <DocumentList documents={documents} newId={newId} />}
           {initial && <div className="state-panel">{loading ? <><div className="skeleton" aria-hidden="true"><span /><span /><span /></div><h3>Gathering your library.</h3></> : <><h3>Your library couldn’t be loaded.</h3><p>A connection problem doesn’t mean your library is empty.</p></>}</div>}
-          {empty && <div className="state-panel"><h3>Start with your first source.</h3><p>Add a text document. Its filename, size and upload time will appear here.</p><button className="button" type="button" disabled={busy || uncertain} onClick={openPicker}>Choose a text file</button></div>}
-          <p className="library-foot">Text documents only · Times shown in WAT</p>
+          {empty && <div className="state-panel"><h3>Start with your first source.</h3><p>Add a document. Its filename, size and upload time will appear here.</p><button className="button" type="button" disabled={busy || uncertain} onClick={openPicker}>Choose a document file</button></div>}
+          <p className="library-foot">TXT and text-based PDF · Times shown in WAT</p>
         </section>
+        {researchOpen && documents?.length ? <ResearchWorkspace session={session} documents={documents} /> : <section className="research-intro" aria-labelledby="research-intro-heading"><div><p className="eyebrow">Work with the evidence</p><h2 id="research-intro-heading">Ask a question. Check the source.</h2><p>Choose documents, find relevant passages and inspect the support for an answer.</p></div><button className="button" type="button" disabled={!documents?.length} onClick={() => setResearchOpen(true)}>Start research</button></section>}
       </main>
     </div>
   </>;

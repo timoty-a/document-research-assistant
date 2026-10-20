@@ -8,7 +8,7 @@ import { type Session } from './authApi';
 const a: Session = { user: { id: '11111111-1111-4111-8111-111111111111', email: 'a@example.com' }, session_context: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', expires_at: '2030-01-01T12:00:00Z' };
 const b: Session = { ...a, user: { ...a.user, id: '22222222-2222-4222-8222-222222222222', email: 'b@example.com' }, session_context: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' };
 const token = 'synthetic_csrf_12345678901234567890123';
-const row = { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', original_filename: 'private-a.txt', byte_size: 4, created_at: '2026-10-17T12:00:00Z' };
+const row = { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', original_filename: 'private-a.txt', byte_size: 4, source_format: 'txt', page_count: null, textless_pages: [], created_at: '2026-10-17T12:00:00Z' };
 const reply = (body: unknown, status = 200, context?: string) => new Response(status === 204 ? null : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...(context ? { 'X-Session-Context': context } : {}) } });
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => resolve = r); return { promise, resolve }; }
 let identity: Session | null;
@@ -108,7 +108,7 @@ it('unavailable session is not mistaken for anonymous', async () => {
 });
 it('hides documents, files and details immediately on logout, with explicit retry after failure', async () => {
   const user = await loaded();
-  await user.upload(screen.getByLabelText('Choose a text document'), new File(['text'], 'selected-private.txt'));
+  await user.upload(screen.getByLabelText('Choose a document'), new File(['text'], 'selected-private.txt'));
   await user.click(document.querySelector('summary')!);
   const pending = deferred<Response>(); override = path => path === '/auth/logout' ? pending.promise : undefined;
   await user.click(screen.getByRole('button', { name: 'Log out' }));
@@ -137,7 +137,7 @@ it.each([200, 401])('discards delayed A list %s, including stale 401, after B be
 it('discards delayed A upload and confirmations after B login; same filenames are not identity', async () => {
   const user = await loaded(), old = deferred<Response>();
   override = (path, init) => path === '/documents' && init?.method === 'POST' ? old.promise : undefined;
-  await user.upload(screen.getByLabelText('Choose a text document'), new File(['text'], 'private-a.txt'));
+  await user.upload(screen.getByLabelText('Choose a document'), new File(['text'], 'private-a.txt'));
   await user.click(screen.getByRole('button', { name: 'Upload document' }));
   identity = b; event(); await screen.findByText('b@example.com');
   await act(async () => old.resolve(reply(row, 201, a.session_context)));
@@ -154,7 +154,7 @@ it('context mismatch clears private view and rechecks; no data from another cont
 it('expired session clears private view without automatically replaying an upload', async () => {
   const user = await loaded(); identity = null;
   override = path => path === '/documents' ? Promise.resolve(reply({}, 401)) : undefined;
-  await user.upload(screen.getByLabelText('Choose a text document'), new File(['text'], 'same.txt'));
+  await user.upload(screen.getByLabelText('Choose a document'), new File(['text'], 'same.txt'));
   await user.click(screen.getByRole('button', { name: 'Upload document' }));
   await screen.findByText('Your session ended. Please log in again.');
   expect(screen.queryByText(row.original_filename)).not.toBeInTheDocument();
@@ -162,7 +162,7 @@ it('expired session clears private view without automatically replaying an uploa
 });
 it('same-user new session clears selected files and expanded details on focus revalidation', async () => {
   const user = await loaded();
-  await user.upload(screen.getByLabelText('Choose a text document'), new File(['text'], 'pending.txt'));
+  await user.upload(screen.getByLabelText('Choose a document'), new File(['text'], 'pending.txt'));
   await user.click(document.querySelector('summary')!);
   identity = { ...a, session_context: b.session_context };
   act(() => window.dispatchEvent(new Event('focus')));
@@ -212,7 +212,7 @@ it('session changes release an old pending mutation without letting its completi
 it('a rejected upload CSRF check clears the selection, rechecks and never replays', async () => {
   const user = await loaded();
   override = (path, init) => path === '/documents' && init?.method === 'POST' ? Promise.resolve(reply({}, 403)) : undefined;
-  await user.upload(screen.getByLabelText('Choose a text document'), new File(['text'], 'same.txt'));
+  await user.upload(screen.getByLabelText('Choose a document'), new File(['text'], 'same.txt'));
   await user.click(screen.getByRole('button', { name: 'Upload document' }));
   await screen.findByText('No file selected');
   expect(fetchMock.mock.calls.filter(([path, init]) => path === '/documents' && init?.method === 'POST')).toHaveLength(1);
@@ -221,7 +221,7 @@ it('a rejected upload CSRF check clears the selection, rechecks and never replay
 it('keeps the selected file when returning from the picker to the same session, then displays a confirmed upload', async () => {
   const user = await loaded();
   const selected = new File(['text'], 'chosen.txt');
-  await user.upload(screen.getByLabelText('Choose a text document'), selected);
+  await user.upload(screen.getByLabelText('Choose a document'), selected);
   act(() => window.dispatchEvent(new Event('focus')));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Upload document' })).toBeEnabled());
   expect(screen.getByText('chosen.txt')).toBeInTheDocument();
@@ -236,7 +236,7 @@ it('keeps the selected file when returning from the picker to the same session, 
 
 it('retains the native file input when focus arrives before its change event', async () => {
   await loaded();
-  const picker = screen.getByLabelText('Choose a text document');
+  const picker = screen.getByLabelText('Choose a document');
   const pending = deferred<Response>();
   override = path => path === '/auth/me' ? pending.promise : undefined;
   act(() => window.dispatchEvent(new Event('focus')));
@@ -251,7 +251,7 @@ it('preserves an in-flight upload and its confirmed row across same-session focu
   const user = await loaded(), upload = deferred<Response>(), me = deferred<Response>();
   const saved = { ...row, id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', original_filename: 'focus-upload.txt' };
   override = (path, init) => path === '/auth/me' ? me.promise : path === '/documents' && init?.method === 'POST' ? upload.promise : undefined;
-  await user.upload(screen.getByLabelText('Choose a text document'), new File(['text'], saved.original_filename));
+  await user.upload(screen.getByLabelText('Choose a document'), new File(['text'], saved.original_filename));
   await user.click(screen.getByRole('button', { name: 'Upload document' }));
   act(() => window.dispatchEvent(new Event('focus')));
   await act(async () => upload.resolve(reply(saved, 201, a.session_context)));
@@ -272,7 +272,7 @@ it('discards a stale focus check after a cross-tab account change', async () => 
 });
 it.each([401, 503])('removes cached private data when a focus check returns %s', async status => {
   const user = await loaded();
-  await user.upload(screen.getByLabelText('Choose a text document'), new File(['text'], 'private-selection.txt'));
+  await user.upload(screen.getByLabelText('Choose a document'), new File(['text'], 'private-selection.txt'));
   identity = null;
   override = path => path === '/auth/me' ? Promise.resolve(reply({}, status)) : undefined;
   act(() => window.dispatchEvent(new Event('focus')));

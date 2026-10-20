@@ -222,7 +222,7 @@ def test_two_user_isolation_legacy_rows_and_public_context_is_not_credential(bro
     assert a.client.get("/documents").json() == [a_doc]
     assert b.client.get("/documents").json() == [b_doc]
     assert a_doc["original_filename"] == b_doc["original_filename"] and a_doc["id"] != b_doc["id"]
-    assert set(a_doc) == {"id", "original_filename", "byte_size", "created_at"}
+    assert set(a_doc) == {"id", "original_filename", "byte_size", "created_at", "source_format", "page_count", "textless_pages"}
     with database.engine.connect() as connection:
         assert connection.scalar(select(Document.owner_id).where(Document.id == legacy)) is None
     anon = make()

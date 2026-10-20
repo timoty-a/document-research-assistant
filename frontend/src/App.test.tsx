@@ -8,7 +8,7 @@ const session = { context, csrf: 'synthetic-csrf', signal: new AbortController()
 function App() { return <AuthenticatedLibrary session={session} />; }
 import { MAX_BYTES, reconcile, type DocumentMetadata } from './api';
 
-const first: DocumentMetadata = { id: 'c2158240-1860-4416-8f9d-f1fe537ce001', original_filename: 'same.txt', byte_size: 4, created_at: '2026-10-13T09:10:00Z' };
+const first: DocumentMetadata = { id: 'c2158240-1860-4416-8f9d-f1fe537ce001', original_filename: 'same.txt', byte_size: 4, source_format: 'txt', page_count: null, textless_pages: [], created_at: '2026-10-13T09:10:00Z' };
 const second = { ...first, id: 'c2158240-1860-4416-8f9d-f1fe537ce002', created_at: '2026-10-13T09:11:00Z' };
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'X-Session-Context': context } });
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
@@ -23,7 +23,7 @@ async function loaded(rows: DocumentMetadata[] = []) {
   return user;
 }
 async function select(user: ReturnType<typeof userEvent.setup>, file = new File(['text'], 'same.txt', { type: 'text/plain' })) {
-  await user.upload(screen.getByLabelText('Choose a text document'), file);
+  await user.upload(screen.getByLabelText('Choose a document'), file);
 }
 
 describe('library and upload behaviour (mocked HTTP)', () => {
@@ -46,8 +46,8 @@ describe('library and upload behaviour (mocked HTTP)', () => {
     expect(document.querySelector('.filename')?.textContent).toBe('<img src=x onerror=alert(1)>' + 'a'.repeat(300) + '.txt');
   });
   it.each([
-    [new File([], 'empty.txt'), 'Choose a non-empty text file.'],
-    [new File(['a'], 'wrong.pdf'), 'Choose a .txt file.'],
+    [new File([], 'empty.txt'), 'Choose a non-empty document.'],
+    [new File(['a'], 'wrong.exe'), 'Choose a .txt or .pdf file.'],
     [new File([new Uint8Array(MAX_BYTES + 1)], 'large.txt'), 'Choose a file no larger than 1 MiB (1,048,576 bytes).'],
   ])('rejects invalid local selection without POST', async (file, message) => {
     const user = await loaded(); await select(user, file);
@@ -73,7 +73,7 @@ describe('library and upload behaviour (mocked HTTP)', () => {
     const user = await loaded(); const pending = deferred<Response>(); fetchMock.mockReturnValueOnce(pending.promise);
     await select(user); const upload = screen.getByRole('button', { name: 'Upload document' });
     await user.dblClick(upload); expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole('button', { name: 'Uploading…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Processing and saving…' })).toBeDisabled();
     await act(async () => pending.resolve(response(first, 201)));
   });
   it('preserves confirmed metadata and acknowledgement after a failed refresh', async () => {
@@ -178,4 +178,75 @@ it('allows deliberate reselection of the same filename after a confirmed upload'
   await user.click(screen.getByRole('button', {name:'Upload document'}));
   await screen.findByText('Document saved'); await select(user);
   expect(screen.getByRole('button', {name:'Upload document'})).toBeEnabled();
+});
+
+describe('PDF library behaviour (mocked HTTP)', () => {
+  const mixed: DocumentMetadata = { ...first, original_filename: 'source.PDF', source_format: 'pdf', page_count: 3, textless_pages: [2] };
+  it('uploads PDF explicitly and announces incomplete extraction with page details', async () => {
+    const user = await loaded();
+    fetchMock.mockResolvedValueOnce(response(mixed, 201));
+    await select(user, new File(['%PDF'], 'source.PDF', { type: 'application/pdf' }));
+    await user.click(screen.getByRole('button', { name: 'Upload document' }));
+    expect(await screen.findByText('Document saved')).toBeInTheDocument();
+    expect(screen.getByText(/Some content was not extracted: no text on PDF pages 2/)).toBeInTheDocument();
+    await user.click(document.querySelector('summary')!);
+    expect(screen.getByText('PDF · 3 pages')).toBeVisible();
+    expect(screen.getByText(/No text was extracted on PDF pages 2/)).toBeVisible();
+    expect(fetchMock.mock.calls[1][1].body.get('file').name).toBe('source.PDF');
+    expect(fetchMock.mock.calls[1][1].headers['Content-Type']).toBeUndefined();
+  });
+  it('preserves PDF provenance and success across stale lists and refresh failure', async () => {
+    const user = await loaded();
+    const stale = deferred<Response>(); fetchMock.mockReturnValueOnce(stale.promise);
+    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    fetchMock.mockResolvedValueOnce(response(mixed, 201));
+    await select(user, new File(['%PDF'], 'source.PDF'));
+    await user.click(screen.getByRole('button', { name: 'Upload document' }));
+    await screen.findByText('Document saved');
+    await act(async () => stale.resolve(response([])));
+    expect(screen.getByText('1 document')).toBeInTheDocument();
+    fetchMock.mockResolvedValueOnce(response({}, 503));
+    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    expect(await screen.findByText('Couldn’t refresh')).toBeInTheDocument();
+    expect(screen.getByText('PDF · 3 pages')).toBeInTheDocument();
+    expect(screen.getByText('Document saved')).toBeInTheDocument();
+  });
+  it.each([
+    ['pdf_no_text', 400, /No usable text was extracted/],
+    ['pdf_encrypted', 400, /Encrypted PDFs are not supported/],
+    ['pdf_invalid', 400, /PDF could not be read safely/],
+    ['pdf_limit_exceeded', 413, /100-page/],
+  ])('maps allowlisted PDF rejection %s without echoing server details', async (code, status, message) => {
+    const user = await loaded();
+    fetchMock.mockResolvedValueOnce(response({ error: code, detail: 'private parser data' }, status));
+    await select(user, new File(['%PDF'], 'source.PDF'));
+    await user.click(screen.getByRole('button', { name: 'Upload document' }));
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.getByText('0 documents')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('private parser data');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+  it('keeps ambiguous PDF failures uncertain and never automatically retries', async () => {
+    const user = await loaded();
+    fetchMock.mockRejectedValueOnce(new Error('private error'));
+    await select(user, new File(['%PDF'], 'source.PDF'));
+    await user.click(screen.getByRole('button', { name: 'Upload document' }));
+    expect(await screen.findByText('Save not confirmed')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('button', { name: 'Upload document' })).toBeDisabled();
+  });
+  it.each([
+    { ...mixed, page_count: 101 }, { ...mixed, textless_pages: [2, 2] },
+    { ...mixed, textless_pages: [0] }, { ...mixed, textless_pages: [1, 2, 3] },
+    { ...mixed, source_format: 'txt' }, { ...mixed, page_count: null },
+  ])('rejects invalid PDF metadata instead of displaying it', async invalid => {
+    fetchMock.mockResolvedValueOnce(response([invalid])); render(<App />);
+    expect(await screen.findByText('Couldn’t load your library')).toBeInTheDocument();
+    expect(screen.queryByText('source.PDF')).not.toBeInTheDocument();
+  });
+  it('retains duplicate PDF filenames as distinct records', async () => {
+    await loaded([mixed, { ...mixed, id: second.id }]);
+    expect(screen.getAllByText('source.PDF')).toHaveLength(2);
+    expect(screen.getByText('2 documents')).toBeInTheDocument();
+  });
 });

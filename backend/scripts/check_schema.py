@@ -13,8 +13,8 @@ from app.db import Base, assert_project_database, create_db_engine
 def check_schema(connection, settings):
     assert_project_database(connection, settings)
     revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-    if revision != "0002_auth":
-        raise RuntimeError("Expected auth migration; do not migrate development without the reviewed backup procedure")
+    if revision != "0003_pdf_documents":
+        raise RuntimeError("Expected PDF migration; do not migrate development without the reviewed backup procedure")
     differences = compare_metadata(MigrationContext.configure(connection, opts={"compare_type": True, "compare_server_default": True}), Base.metadata)
     if differences:
         raise RuntimeError("Migration/model differences detected")

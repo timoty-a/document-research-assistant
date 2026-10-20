@@ -6,6 +6,8 @@ A learning project for software engineering. Users will eventually upload docume
 
 Milestones 1 and 2 are **complete**. The user confirmed a successful manual interface trial on 17 October 2026. Milestone 3 is also **complete for its agreed local scope**, following backend/frontend checks and the user’s successful manual trial. Use the isolated test trial below; development has not been migrated. See [the implementation plan](docs/PLAN.md) for separate automated, browser, and user-reported evidence.
 
+Milestone 4 PDF support is **in progress**, with its [selected design and limits](docs/PDF_DESIGN.md). Use the isolated trial commands below; development remains unmigrated. A user PDF trial is still required.
+
 ## Planned design
 
 - Backend: Python with FastAPI, starting as one application with clear modules for API handling, validation, document operations, and persistence.
@@ -72,7 +74,7 @@ The template contains placeholders that configuration intentionally rejects. Con
 
 ### Migrate and verify
 
-**Existing workspace: do not run this migration block yet.** `0002_auth` has not been applied to `dra_dev`; use the reviewed backup/migration procedure below only when authorized. For a fresh installation or an approved migration:
+**Existing workspace: do not run this migration block yet.** `0002_auth` and `0003_pdf_documents` have not been applied to `dra_dev`; use the reviewed backup/migration procedure below only when authorized. For a fresh installation or an approved migration:
 
 ```bash
 .venv/bin/python -m alembic -c backend/alembic.ini upgrade head
@@ -109,7 +111,9 @@ Open `http://127.0.0.1:8000/docs` or request `http://127.0.0.1:8000/health`. The
 
 Database tests use `TEST_DB_PASSWORD` with the fixed `dra_test` role/database and verify ownership before writes. All migrations and mutations use generated isolated schemas, never the shared `public` schema. Foundation row tests roll back; API/auth tests exercise real commits and remove only their own generated schemas afterward. Existing test documents are preserved. Tests never truncate shared tables, drop databases, or mutate development. Without `--database`, database checks are explicitly skipped; with it, unavailable access is a failure.
 
-### Upload and list API
+### Upload and list API — historical TXT contract
+
+The TXT rules below remain applicable; milestone 4 adds PDF handling and metadata fields as described in the current PDF section at the end of this README.
 
 - `POST /documents`: requires a logged-in session cookie, allowed Origin and session-bound `X-CSRF-Token`; send exactly one multipart upload named `file` (no owner/user fields or query parameters). Successful commits return `201` with `id`, `original_filename`, `byte_size`, and `created_at`; no content is returned. Extensions are checked case-insensitively, regardless of the declared MIME type.
 - `GET /documents`: requires a logged-in session and returns only that account’s records; returns a JSON list of only those metadata fields, or `[]`. SQL selects metadata columns without fetching content and orders by creation timestamp ascending, then UUID ascending.
@@ -120,7 +124,7 @@ Database tests use `TEST_DB_PASSWORD` with the fixed `dra_test` role/database an
 
 Both endpoint handlers are synchronous, so FastAPI runs file reads and SQLAlchemy/psycopg work in worker threads. The early ASGI boundary checks authentication/CSRF in a worker before multipart parsing. The async file dependency then checks the already-parsed form; it makes no database calls. Application shutdown disposes the engine pool through a worker thread.
 
-The file-size validator reads at most 65,536 bytes per call and stops after 1,048,577 bytes (the limit plus one overflow-detection byte), ignoring client size declarations. **This is not a total HTTP request-size limit.** For authenticated, CSRF-validated requests, FastAPI/Starlette parses multipart data before the handler runs and may buffer file data in memory or spool it to a temporary file first, including data larger than our accepted document limit. The parser's spool threshold is not an upload-size cap. A transport-level request limit remains outside this local milestone.
+The file-size validator reads at most 65,536 bytes per call and stops after 1,048,577 bytes (the limit plus one overflow-detection byte), ignoring client size declarations. **This file validator is not itself a total HTTP request-size limit.** Milestone 4 adds a separate authenticated 2 MiB body cap before parsing. For authenticated, CSRF-validated requests, FastAPI/Starlette parses multipart data before the handler runs and may buffer file data in memory or spool it to a temporary file first, including data larger than our accepted document limit but subject to the new body cap. The parser's spool threshold is not an upload-size cap. A transport-level request limit remains outside this local milestone.
 
 ### Manual verification — completed by the user
 
@@ -240,10 +244,10 @@ chmod 700 "$HOME/dra-backups"
   umask 077
   set -o noclobber
   pg_dump --host=127.0.0.1 --port=5432 --username=dra_dev --dbname=dra_dev \
-    --password --format=custom > "$HOME/dra-backups/before-auth.dump"
+    --password --format=custom > "$HOME/dra-backups/before-auth-and-pdf.dump"
 )
 # Continue only if pg_dump exited successfully:
-pg_restore --list "$HOME/dra-backups/before-auth.dump" > /dev/null
+pg_restore --list "$HOME/dra-backups/before-auth-and-pdf.dump" > /dev/null
 ```
 
 Inspect exit results; a failed dump may leave an incomplete archive. Archive listing proves readability, **not** recoverability: arrange a restore drill to a separately named, administrator-provisioned disposable database before proceeding. Do not restore over development or an existing database as a “test”. Preserve the private archive and a record of the previous application revision. Provision/restore permissions must be handled by the operator, never bypassed.
@@ -258,7 +262,7 @@ Only after backup review, recovery validation and explicit authorization:
 .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --no-proxy-headers
 ```
 
-Expect revision `0002_auth`. Migration adds auth tables and nullable indexed ownership, preserving all historical text/IDs/metadata with no owner assignment. Alembic uses transactional PostgreSQL DDL; if a revision fails, stop, inspect sanitized results/current revision and retry after fixing the cause. Tests prove rollback/resume on an injected migration failure; they do not prove recovery from every operational failure. `0002_auth` refuses downgrade to prevent loss of accounts/ownership and exposure by old code. Prefer a reviewed forward fix; a full backup restore needs separate authorization and loses changes made since that backup. Never restart old unfiltered code against private account data.
+Expect revision `0003_pdf_documents`. The upgrade includes `0002_auth` and `0003_pdf_documents`: auth tables, nullable indexed ownership, preserved TXT rows, and PDF source/page storage, with no owner assignment. Alembic uses transactional PostgreSQL DDL; if a revision fails, stop, inspect sanitized results/current revision and retry after fixing the cause. Tests prove rollback/resume on an injected migration failure; they do not prove recovery from every operational failure. `0002_auth` refuses downgrade to prevent loss of accounts/ownership and exposure by old code. Prefer a reviewed forward fix; a full backup restore needs separate authorization and loses changes made since that backup. Never restart old unfiltered code against private account data.
 
 
 ## Authentication interface — milestone 3 complete for local scope
@@ -314,3 +318,99 @@ All **60 mocked frontend tests**, TypeScript and production build passed. New co
 The user confirmed login and the upload fix work, then confirmed session restoration after refresh, logout, and switching between two accounts with each seeing only its own documents. These reports are separate from automated tests and agent-operated browser checks. They complete the agreed local milestone 3 manual trial; they do not establish a separate registration, accessibility or injected-failure audit. The recorded verification limits remain.
 
 This documentation-only update did not rerun tests, migrate `dra_dev`, assign historical documents, commit or push. `git diff --check` passed. Development migration and a recoverable private backup remain separate operator steps; do not expose the application publicly.
+
+## Selectable-text PDFs — milestone 4 in progress
+
+The library now accepts UTF-8 `.txt` and text-based `.pdf` files, case-insensitively, up to **1 MiB (1,048,576 bytes)** each. PDF support is local-only and pending your manual trial. There is no full document reader, OCR or PDF password entry. The research increment below adds bounded passage inspection and optional AI answering. See [PDF_DESIGN.md](docs/PDF_DESIGN.md) for the selected design and implementation corrections.
+
+PDFs are extracted page by page using pinned pypdf 6.21.1 with strict parsing. Encrypted files (including empty-password encryption), malformed files and files yielding no usable text receive clear `400` rejections. Image-only scans need OCR and are unsupported. Mixed files are accepted if some text is usable, with warnings identifying physical pages where none was extracted. Images within text-bearing pages are not read; reading order, tables and existing OCR accuracy are not guaranteed.
+
+The original PDF, aggregate text, extraction profile and every physical page's text are committed together after session/CSRF revalidation. Original bytes remain private in PostgreSQL; no original-file or full-text endpoint is exposed; the research increment provides authenticated, bounded passage context. TXT text remains exact. `byte_size` still means original uploaded bytes. Upload/list metadata now also contains `source_format` (`txt`/`pdf`), `page_count` (null for TXT) and sorted `textless_pages` (empty for TXT). Lists select only metadata, including a stored generated page-text-presence flag, and keep ownership filtering and ordering.
+
+Limits: 100 PDF pages, 256 KiB UTF-8 text per page, 2 MiB aggregate text including page separators, 4 MiB worker output, one extraction child per backend process, 5 CPU seconds (6-second hard backstop), 10 wall seconds and 512 MiB child address space. These are independent bounds, not throughput promises or an application-wide memory limit. A separate **2 MiB multipart-body cap** runs after authentication and before the parser receives bytes; parsing may still buffer/spool within that cap. Slow-upload/concurrent-connection limits are not provided. Input/resource overflow is `413`; a busy worker is `429`; unexpected processing/store failure is sanitized `503`. Worker processes are resource-constrained, not security sandboxes.
+
+Only a validated `201` confirms saving. Lost responses and ambiguous server failures remain uncertain: refresh before deliberately retrying. No POST is automatically retried. Details shows format/page count and textless-page warnings; successful mixed uploads also announce incomplete extraction. Existing session clearing, native picker/focus handling and acknowledged-row retention remain in place.
+
+### Run the PDF trial safely
+
+From the repository root, update only the project environment if needed:
+
+```bash
+.venv/bin/python -m pip install -r backend/requirements.lock
+.venv/bin/python -m pip install --no-deps --no-build-isolation -e backend
+.venv/bin/python -m pip check
+npm --prefix frontend ci
+```
+
+Terminal 1 — **use the isolated test launcher, not development Uvicorn**:
+
+```bash
+.venv/bin/python frontend/scripts/test_backend.py
+```
+
+Terminal 2:
+
+```bash
+npm --prefix frontend run dev
+```
+
+Open `http://127.0.0.1:5173/`, register/login with synthetic accounts and disposable passwords, and try a small text-based PDF. Check upload, listing/Details, page warnings and reload persistence. Try a scan, encrypted file and second account. Check desktop/mobile, keyboard focus and returning from the native picker. The launcher applies `0003_pdf_documents` only in its own generated `dra_test` schema. Ctrl+C removes that schema and its trial records; persistence is tested across page reloads while the launcher runs. Never migrate `dra_dev` or assign historical documents for this trial.
+
+Verification commands:
+
+```bash
+.venv/bin/python -m pytest -c backend/pyproject.toml backend/tests --database -W error::DeprecationWarning
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
+# On a busy machine, run component checks with one worker and more scheduling time:
+npm --prefix frontend test -- --maxWorkers=1 --testTimeout=15000
+```
+
+Tests generate synthetic PDFs in memory and migrate only isolated schemas in the verified `dra_test` database. New migration `0003_pdf_documents` preserves legacy/owned TXT rows and refuses destructive downgrade. The existing trial launcher already upgrades to head; no launcher change was needed. `dra_dev` was checked read-only and remains at `0001_documents`, with neither auth nor PDF migrations. Its eventual upgrade requires separate authorization and the private backup/recovery procedure above; the restore drill is still outstanding.
+
+### PDF verification boundaries
+
+Final automated checks: **202 backend tests passed** with PostgreSQL and deprecation warnings as errors (110.56 s), **74 mocked frontend tests passed** with `--maxWorkers=1 --testTimeout=15000`, TypeScript/build, dependency checks, compilation, offline SQL and isolated live migration/model checks passed. Initial failures found an insufficient 256 MiB import budget, synthetic fixture/assertion errors and five frontend scheduling timeouts; corrections and exact evidence are in PLAN. An earlier backend run had no retrievable final result and was not counted; the final full run passed.
+
+A separate real TCP API trial using the isolated launcher verified registration/login, a mixed PDF's `201`, list/fresh-client persistence, scan/encryption rejections and two-user isolation. Fresh SQL confirmed exact source/text/pages and revision `0003_pdf_documents`; cleanup was verified. Upload took 3.754 s. Three small extraction-process benchmark samples measured median 2.652 s and maximum 2.778 s; these are local measurements, not capacity guarantees.
+
+Cleanup inventory found no remaining frontend trial schema and three generated integration-test schemas of unconfirmed run provenance. Those three were preserved for review; no broad cleanup was performed.
+
+These checks are separate from prior milestone browser/user evidence. The current built-in browser attempt failed at `cua.getTab` for the existing `http://127.0.0.1:5173/` tab: “The requested URL protocol is not allowed. Allowed protocols: \"http:\", \"https:\".” Its security policy prohibited workarounds; none were attempted. No current PDF browser upload, desktop/mobile inspection, screenshot, screen-reader/zoom audit or user trial is claimed. Milestone 4 remains in progress, not production-ready.
+
+
+## Research prototype — milestone 5 in progress
+
+The library now has **Start research**: select one to five owned sources, enter a question, and choose **Find passages locally**. It returns exact matching passages with source names and physical PDF pages (TXT has no invented page numbers). Open a citation to inspect its highlighted quote and limited surrounding saved text; Return to citation restores focus. Local search uses word matching, not embeddings: synonyms, languages without word boundaries, images and extraction errors can hide useful evidence. A citation locates text; it does not prove a conclusion is correct.
+
+**AI is disabled by default in the tracked configuration example.** On 20 October 2026 you privately configured the Groq key, enabled AI and reported that the AI flow works. This is user-reported manual evidence; automated provider tests remain mocked and the agent has not independently inspected a real response. Local search needs no key and sends no source text externally. The separate **Ask AI** action is disabled until explicitly enabled; submitting the form always performs local search. When eventually enabled, Groq's free plan receives the question and at most six passages, without filenames, account identity, original PDFs or history. Passage text itself may contain private information. No automatic retry, paid fallback or provider switch exists. Keep the Groq organization on Free; the app cannot inspect its billing tier. See [RESEARCH_DESIGN.md](docs/RESEARCH_DESIGN.md) for privacy, quotas, limits and verification boundaries.
+
+To enable AI locally, privately set `GROQ_API_KEY` and `AI_ENABLED=true` in the ignored repository-root `.env`, then restart the backend. Never paste the key into chat or place it in frontend configuration. You have completed this private configuration locally; do not enable billing. Configuration status is not provider-readiness evidence. Questions and answers are not saved.
+
+### Run and verify locally
+
+Use the same two trial commands above, from the repository root:
+
+```bash
+# Terminal 1: isolated dra_test schema, not the unmigrated development database
+.venv/bin/python frontend/scripts/test_backend.py
+```
+
+```bash
+# Terminal 2: frontend with same-origin /auth, /documents and /research proxies
+npm --prefix frontend run dev
+```
+
+Open `http://127.0.0.1:5173/`. Register/login, upload synthetic TXT and selectable-text PDF sources, choose Start research, select sources, and search using words present in them. Inspect quotes/page numbers, test no matches, change sources/question, reload, log out and try another account. The launcher applies migration head only to its own temporary schema in guarded `dra_test`; normal Ctrl+C removes its records. It inherits private AI settings: `AI_ENABLED=true` enables explicit Ask AI requests; use `AI_ENABLED=false` for local-only passage search. Restart the backend after changing either setting. Do not migrate `dra_dev` for this trial.
+
+The existing setup/verification commands remain reproducible. HTTPX 0.28.1, already pinned in the backend lock, is now a runtime dependency; no model SDK, vector service, new frontend dependency or research migration was added.
+
+Verification on 18 October 2026: **257 backend tests passed** with PostgreSQL and deprecation warnings as errors (50.92 s); **96 frontend tests passed** with mocked HTTP (17.74 s), TypeScript and production build passed. Provider tests use HTTPX MockTransport and synthetic keys only; they cover strict output/citation checks, sanitized failures, bounded responses/deadline and no retries. A separate real TCP API trial verified local search, exact Unicode TXT offsets, PDF physical page/context, fresh-client persistence, two-user isolation and disabled AI. Both committed synthetic records were confined to the launcher's verified `dra_test` schema; its removal was confirmed, preserving pre-existing schemas.
+
+Current browser inspection remains blocked by the recorded built-in browser URL-policy rejection; no new screenshots or visual inspection are claimed. Your later manual AI success is recorded below. Detailed PDF/research acceptance checks, agent-operated live synthetic Groq verification, answer quality and real external-service failure behavior remain unverified. Milestones 4/5 stay in progress. Development remains unmigrated, backup recovery verification remains outstanding, and this is not production readiness.
+
+Repeat verification on 20 October 2026: **257 backend tests passed** (51.06 s), **96 mocked frontend tests passed** (17.84 s), TypeScript/build and dependency checks passed. A fresh isolated real HTTP trial confirmed TXT/PDF upload/list, exact passage/page citations, invalid-file rejections, session restoration/logout and two-user isolation; AI remained disabled. Its three synthetic records and generated schema were removed, preserving existing schemas. These results do not constitute browser or live-provider verification. Detailed evidence and remaining gaps are recorded in PLAN.
+
+
+Manual AI trial — 20 October 2026: after privately configuring the Groq key and enabling AI, you reported “everything works now.” This records successful user-reported AI use, not an agent-observed provider response or a detailed quote/page, privacy, accessibility or answer-quality audit. The key remains in ignored local configuration; tracked defaults stay disabled. Milestones 4/5 remain in progress until their remaining acceptance evidence is recorded. No application code changed for this documentation update, so the successful checks above were not repeated.

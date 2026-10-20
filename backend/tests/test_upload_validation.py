@@ -41,7 +41,7 @@ def test_valid_content_ignores_overstated_size_and_closes_file():
     assert "héllo" not in repr(document)
 
 
-@pytest.mark.parametrize("filename", [None, "", "bad\x00.txt", "bad\ud800.txt", "wrong.pdf"])
+@pytest.mark.parametrize("filename", [None, "", "bad\x00.txt", "bad\ud800.txt", "wrong.exe"])
 def test_invalid_filename_closes_stream_without_reading(filename):
     stream = CountedStream(b"synthetic")
     with pytest.raises(HTTPException) as error:

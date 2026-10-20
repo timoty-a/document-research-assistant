@@ -8,7 +8,7 @@ def settings(**overrides):
     values = dict(
         _env_file=None, app_env="development", db_host="127.0.0.1", db_port=5432,
         db_name="dra_dev", db_user="dra_dev", db_password="synthetic-password",
-        test_db_password=None,
+        test_db_password=None, ai_enabled=False, groq_api_key=None,
     )
     values.update(overrides)
     return Settings(**values)
@@ -41,3 +41,12 @@ def test_validation_message_does_not_display_secret():
 def test_test_environment_requires_test_role_and_database():
     config = settings(app_env="test", db_name="dra_test", db_user="dra_test")
     assert config.database_url.database == "dra_test"
+
+
+def test_ai_is_disabled_by_default_and_requires_a_private_key():
+    assert settings(ai_enabled=False, groq_api_key=None).ai_enabled is False
+    for value in [None, '', 'REPLACE_WITH_PRIVATE_KEY']:
+        with pytest.raises(ValidationError):
+            settings(ai_enabled=True, groq_api_key=value)
+    configured = settings(ai_enabled=True, groq_api_key='synthetic-private-groq-key')
+    assert 'synthetic-private-groq-key' not in repr(configured)

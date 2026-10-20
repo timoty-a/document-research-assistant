@@ -16,6 +16,10 @@ class ValidatedDocument:
     original_filename: str = field(repr=False)
     content: str = field(repr=False)
     byte_size: int
+    source_format: str = "txt"
+    source_pdf: bytes | None = field(default=None, repr=False)
+    pages: tuple[str, ...] = field(default=(), repr=False)
+    extraction_version: str | None = None
 
 
 def validate_filename(filename: str | None) -> str:
@@ -29,8 +33,8 @@ def validate_filename(filename: str | None) -> str:
                 raise HTTPException(400, "Filename exceeds the database text storage limit")
     except UnicodeError:
         raise HTTPException(400, "Filename must be valid UTF-8 text") from None
-    if filename[-4:].lower() != ".txt":
-        raise HTTPException(400, "Only .txt files are supported")
+    if filename[-4:].lower() not in {".txt", ".pdf"}:
+        raise HTTPException(400, "Only .txt and .pdf files are supported")
     # No path operations: even a path-looking filename is just metadata.
     return filename
 
@@ -47,6 +51,10 @@ def read_document(upload: UploadFile) -> ValidatedDocument:
             data.extend(chunk)
             if len(data) > MAX_DOCUMENT_BYTES:
                 raise HTTPException(413, "File exceeds the 1,048,576-byte limit")
+        if filename.lower().endswith('.pdf'):
+            from app.documents.pdf import extract_pdf, validate_pages, PROFILE
+            pages = extract_pdf(bytes(data))
+            return ValidatedDocument(filename, validate_pages(list(pages)), len(data), 'pdf', bytes(data), pages, PROFILE)
         try:
             content = data.decode("utf-8", errors="strict")
         except UnicodeDecodeError:

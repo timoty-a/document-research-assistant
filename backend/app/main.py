@@ -14,6 +14,10 @@ from app.auth.router import router as auth_router
 from app.config import Settings
 from app.db import create_db_engine
 from app.documents.router import router
+from app.documents.body_limit import UploadBodyLimit
+from app.documents.pdf import PDFError
+from app.research.provider import ResearchError, generate
+from app.research.router import router as research_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -29,8 +33,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Document Research Assistant", lifespan=lifespan)
     app.state.clock = auth_service.utcnow
+    app.add_middleware(UploadBodyLimit)
     app.add_middleware(AuthBoundary)
     app.include_router(auth_router)
+    app.include_router(research_router)
+    app.state.research_generator = generate
+
+    @app.exception_handler(ResearchError)
+    async def research_error(request, error):
+        headers = {"Retry-After": "2"} if error.status == 429 else {}
+        return JSONResponse({"error": error.code, "message": error.message}, status_code=error.status, headers=headers)
+
+    @app.exception_handler(PDFError)
+    async def pdf_error(request, error):
+        headers = {"Retry-After": "2"} if error.status == 429 else {}
+        return JSONResponse({"error": error.code, "detail": error.detail}, status_code=error.status, headers=headers)
 
     @app.exception_handler(auth_service.AuthError)
     async def auth_error(request, error):

@@ -24,7 +24,8 @@ def main():
         raise SystemExit('Configure TEST_DB_PASSWORD privately before running this trial.')
     settings = Settings(_env_file=None, app_env='test', db_name='dra_test', db_user='dra_test',
                         db_host=local.db_host, db_port=local.db_port,
-                        db_password=local.test_db_password)
+                        db_password=local.test_db_password, ai_enabled=local.ai_enabled,
+                        groq_api_key=local.groq_api_key)
     engine = create_db_engine(settings)
     schema = 'dra_frontend_trial_' + uuid4().hex
     created = False

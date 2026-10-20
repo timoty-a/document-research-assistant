@@ -1,6 +1,6 @@
 # Implementation plan
 
-Milestones 1–3 are **complete** for their agreed local scope; milestones 4–8 remain **planned**. Development authentication migration is a separate, unexecuted operator step. Implement one agreed milestone at a time.
+Milestones 1–3 are **complete** for their agreed local scope; milestone 4 is **in progress** pending its PDF manual trial; milestone 5 is the user-authorized active prototype increment, **in progress**; milestones 6–8 remain **planned**. Development authentication migration is a separate, unexecuted operator step. Implement one agreed milestone at a time.
 
 ## Milestone 1 — local document API (complete)
 
@@ -160,14 +160,91 @@ These confirmations are separate from the 154 backend tests, 60 mocked frontend 
 
 Operational follow-up, not performed or authorized by this confirmation: development migration and a private backup/restore drill. `dra_dev` remains at `0001_documents`; historical documents remain unassigned. Real browser fault injection, screen-reader/native-zoom and long-duration expiry checks retain their recorded limits. HTTPS cookies, email verification/recovery and public deployment remain outside the completed local scope.
 
+## Milestone 4 — selectable-text PDFs (in progress)
+
+The selected design and its corrections are in [PDF_DESIGN.md](PDF_DESIGN.md). The user approved accepting mixed PDFs with explicit textless-page warnings, then authorized implementation. Keep the source library design and existing TXT/auth behaviour.
+
+Implemented:
+
+- pypdf 6.21.1, reproducible backend lock; strict page-by-page extraction in a fresh minimal child process, with 1 MiB input, 100 pages, bounded extracted text/IPC, one process slot, CPU/wall/address-space limits and cleanup. Encrypted, malformed and entirely textless inputs are rejected; mixed pages retain physical positions and warnings.
+- `0003_pdf_documents`, preserving existing TXT/ownership data, retained original PDF bytes, immutable extraction profile, page rows and computed text-presence metadata. Source/document/pages commit together after locked session revalidation. No raw source/content is returned by upload or listing.
+- Authenticated pre-parser 2 MiB multipart body cap; original 1 MiB file limit remains independently enforced while reading. Fixed PDF rejection codes/messages, sanitized worker/store failures, and no automatic retry.
+- React accepts TXT/PDF, validates actual metadata shapes, exposes format/page/warning details, and preserves existing session, picker/focus, refresh and uncertain-save handling. Images/layout/OCR limitations are visible.
+
+Automated verification — 17 October 2026:
+
+- Final full backend command with `--database -W error::DeprecationWarning -q`: **202 passed, 0 failed/skipped/warnings**, 110.56 seconds. Uses real PostgreSQL in generated, guarded `dra_test` schemas and HTTPX ASGI transport. Covers existing TXT/auth behaviours plus PDF source/page persistence, metadata-only SQL, boundaries, malformed/encrypted/image-only/mixed inputs, actual subprocess limits/lifecycle, pre-parser body counting/file cleanup, ownership, rollback, logout/expiry during extraction, and legacy migration preservation/failed-DDL resume/refused downgrade. Actual Alembic/model checks pass in isolated schemas.
+- **74 frontend component/API tests passed**, 0 failed/skipped, with mocked HTTP. Command: `npm --prefix frontend test -- --maxWorkers=1 --testTimeout=15000`. Includes PDF warning/error/metadata cases, stale/failed refresh and uncertain outcomes, duplicate filenames, and the existing session/picker regressions. TypeScript and production build passed. No frontend dependency/lock changes.
+- `pip check`, Python compilation and offline Alembic SQL generation passed. pypdf 6.21.1 installed successfully on Python 3.14.7; its declared requirement is Python >=3.9. PyPI reported zero advisory entries for that release when checked; that is not a comprehensive security audit.
+- Real-child benchmark: three small synthetic samples (mixed, rotated and image/text overlay), median 2.652 seconds, maximum 2.778 seconds. Address-space and CPU/output-file enforcement are exercised with controlled child programs; output-size branches also use reduced test limits. This is not a hostile-corpus or production capacity guarantee.
+- Initial 256 MiB address-space checks rejected valid small PDFs during import; increased to 512 MiB after measuring Python/pypdf virtual memory. Fixed a synthetic exact-byte fixture's serialization overhead and a columns test that incorrectly expected an inserted newline; saved extraction remains unchanged. A generated-column reflection warning was corrected without suppressing warnings. An initial frontend run had five 5-second timeouts during overlapping resource checks; all 74 passed with the explicit single-worker/15-second settings above. An earlier backend run's final terminal result was unavailable and was not counted; the final retained complete run above passed.
+
+Real TCP API trial — separate from mocked frontend/browser evidence:
+
+- Started the existing isolated trial launcher, registered/logged in two synthetic accounts, saved a three-page mixed PDF with real `201`, checked textless page 2, listing and persistence through a new HTTP client. The other account saw an empty library. Image-only and encrypted uploads returned `400`.
+- Fresh guarded SQL verified the exact original PDF bytes, exact aggregate text, owner, three page records and revision `0003_pdf_documents`. The real HTTP upload took 3.754 seconds. The launcher stopped and removal of only its generated schema was independently confirmed. This is API/client verification, not React or browser verification.
+- Read-only development check passed: `dra_dev` still reports `0001_documents`, with no auth table. No development migration, historical assignment, operational cleanup or database reset was performed.
+- `git diff --check`, changed-file configured-credential scans and ignored private/generated-path checks passed. Nothing is staged, committed or pushed.
+- Final read-only cleanup inventory: zero frontend trial schemas remain; three generated integration-test schemas remain with unconfirmed originating runs. They were preserved, not broadly deleted. Their provenance/cleanup requires review; do not claim all historical test schemas are removed. The retained full suite completed successfully and the separately identified TCP trial schema was removed.
+
+The real browser trial is blocked by the built-in browser URL policy: selecting the existing `http://127.0.0.1:5173/` tab returned “requested URL protocol is not allowed”, despite listing HTTP/HTTPS as allowed. No workaround or alternate browser surface was attempted. No PDF screenshots or visual inspection are claimed.
+
+User manual verification: **pending** for PDF upload/list/reload, mixed-page warnings, rejection of unsupported PDFs, account isolation and responsive/keyboard behaviour. Prior TXT/auth manual confirmations do not verify PDFs. Milestone 4 stays in progress.
+
+Development remains unmigrated at the documented `0001_documents`; only guarded isolated `dra_test` schemas may be migrated here. No ownerless documents are assigned/deleted. Development migration and private backup recovery verification remain separate outstanding operator work. Local completion will not establish production readiness.
+
+## Milestone 5 — questions and inspectable evidence (in progress)
+
+The user authorized autonomous increments toward a TXT/PDF → research question → synthesized answer → passage/page-citation prototype, then selected Groq's free API plan. They initially deferred key configuration; their later authorization, private enablement and successful manual AI report are recorded below. See [RESEARCH_DESIGN.md](RESEARCH_DESIGN.md). Milestone 4's implementation is preserved and its manual trial remains pending; neither milestone is marked complete.
+
+Implemented:
+
+- One small backend research module: owner-filtered selection, bounded lexical retrieval, original Unicode-code-point quote offsets, physical PDF pages, exact provenance and bounded authenticated context. No migration, backfill, ownership reassignment or additional infrastructure.
+- Separate local search and AI endpoints, pre-body authentication/Origin/CSRF, session-context/no-store responses, pre/post-generation session checks, persistent account/project attempt budgets, two per-process slots, bounded JSON/prompt/output and a 25-second total provider deadline. Blocking SQL/search and the provider adapter run in workers without holding database locks during network calls.
+- Groq strict JSON claims with server-resolved evidence IDs, fixed endpoint/model, minimized payload, no tools/history/retries/provider fallback. `AI_ENABLED=false` by default; real calls remain disabled. Citation integrity checks do not prove semantic entailment, and lexical retrieval is not comprehensive.
+- Approved paper/teal library with source selection, explicit local-search/Ask-AI controls, pending/no-match/error states, citation/context focus navigation, plain-text rendering and generation/session guards. Logout/source/question changes discard private results; old failures cannot invalidate a new session. No saved conversations or browser credential storage.
+
+Automated verification — 18 October 2026:
+
+- Final full PostgreSQL suite: **257 passed, 0 failed/skipped**, 50.92 seconds with `--database -W error::DeprecationWarning -q`. Includes PDF/auth/migration regression checks, exact Unicode windows/pages, ownership/CSRF/pre-body rejection, range/version checks, budgets/concurrency, sanitized failures and logout/expiry during generation. Mutations use generated isolated schemas in guarded `dra_test`.
+- Provider HTTP is mocked, including strict schema payload, minimized disclosure, unknown/fabricated/missing references, truncation/refusal/invalid output, bounded response/total timeout, upstream failures and no retry. No key check or real provider call was made.
+- **96 frontend tests passed**, 0 failed/skipped, 17.74 seconds, `--maxWorkers=1 --testTimeout=15000`; TypeScript/production build passed. Includes duplicate names, selection limits, local-only mode, explicit submission, source/question/context/session races, malformed responses, plain-text rendering, citation focus and logout clearing alongside existing picker/session regressions.
+- Initial test-only errors were corrected: a user-isolation assertion requested AI despite disabled configuration, and typed fetch mocks needed accurate signatures. The final complete runs above passed. Earlier partial results are not counted as final evidence.
+
+Separate real TCP API trial: synthetic registration/login, exact Unicode TXT and mixed three-page PDF uploads, local search, physical page/context inspection, fresh-client persistence, two-user list/research/context isolation and disabled-AI rejection all passed. SQL confirmed two committed rows and `0003_pdf_documents` in the single generated trial schema. The launcher stopped, and removal of exactly that schema was confirmed; pre-existing schemas were preserved. No external service or React/browser trial is implied by this API check.
+
+Final hygiene checks: `pip check`, Python compilation and `git diff --check` passed. Changed-file scans found no configured database credential values or key-pattern matches; `.env`, virtual environments, dependencies and build output remain ignored/untracked. A fresh read-only `dra_dev` check confirmed `0001_documents` without auth tables. Nothing was staged, committed or pushed.
+
+Outstanding: user PDF/research trial; live synthetic Groq connectivity/strict-model compatibility, answer usefulness and live quota/failure behavior; current desktop/mobile/keyboard browser inspection (blocked by the previously recorded built-in browser URL-policy rejection, no workaround or screenshots); private backup/restore drill and any separately authorized development migration. Three historical integration schemas of unconfirmed provenance remain preserved for review. `dra_dev` remains unmigrated. No commit/push, deployment or production-readiness claim.
+
+Acceptance before prototype completion: user can upload TXT/PDF under their own account, select sources, search and inspect exact context/page citations, then—after private free-plan key setup—receive a real synthetic grounded answer with inspectable references. Confirm empty/pending/rejected/uncertain states, account isolation and session clearing, keyboard/mobile operation and no automatic replay. Record automated, API, browser, live-provider and user evidence separately. Do not mark completion based on mocked AI alone.
+
+### Repeat verification — 20 October 2026
+
+At the user's request, reran the current implementation: **257 backend tests passed**, 0 failed/skipped (51.06 s), with PostgreSQL enabled and deprecation warnings as errors; **96 mocked frontend tests passed** (17.84 s), TypeScript and production build passed. Dependency checks passed. No application code changed during this verification.
+
+A separate real HTTP trial in one generated, guarded `dra_test` schema passed registration/login, empty listing, TXT/PDF upload and metadata-only listing, duplicate filenames, mixed-page metadata, exact Unicode quote offsets and physical PDF citation/context inspection, no-match search, fresh-client session/list restoration, logout and unauthenticated rejection. Empty/whitespace, unsupported extension, invalid UTF-8, NUL, scanned and encrypted inputs were rejected. A second account could neither list nor inspect/research the first account's sources. AI was explicitly disabled for the trial; relevant AI requests were rejected without provider calls. Three committed synthetic documents were confirmed by SQL; only the trial schema was removed, with pre-existing schemas preserved.
+
+This is automated/API evidence, not a new browser trial or proof of real AI synthesis. The prior browser URL-policy limitation remains; no current visual inspection or screenshots are claimed. The user reported testing the prototype without specifying individual outcomes; do not expand that report into detailed manual acceptance evidence or mark either milestone complete. Live Groq and the recorded operational/accessibility gaps remain outstanding. No development migration, historical ownership assignment, commit or push.
+
+### Manual AI trial and checkpoint review — 20 October 2026
+
+The user requested live AI use, privately configured `GROQ_API_KEY` and `AI_ENABLED=true`, and reported “everything works now.” Record successful manual AI use separately from the 257 backend/96 mocked frontend tests and the local-only real HTTP trials above. The agent's configuration check made no provider request and exposed no credentials. No independently inspected real answer, specific trial contents, citation-quality audit, live quota/fault test or current visual/accessibility check is claimed.
+
+Reviewed the uncommitted PDF extraction/storage/migration, research retrieval/provider/API, React library/research integration, test updates and pinned dependencies. The checkpoint includes intended source, tests, migration, lockfile and documentation; local secrets, uploads, dependencies, build output and captures are excluded. Updated stale disabled/deferred AI wording while preserving default-off tracked configuration and historical evidence. Application code is unchanged since the successful 20 October verification, so tests were not repeated solely for documentation changes.
+
+Checkpoint hygiene: `git diff --check` passed; configured-credential scans passed for changed/new files and found no Groq key in tracked/nonignored files or the existing frontend build. An initial broad scan flagged database-password substrings inside unchanged CSS colour literals; inspected these as incidental matches without displaying credentials. Private `.env`, environments, dependencies and build output remain ignored/untracked; no backups or screenshots are included. The index remains unstaged.
+
+Milestones 4/5 remain in progress: detailed PDF/research manual acceptance, current browser accessibility/visual verification, independent live synthetic answer/citation-quality checks and real provider failure behavior retain their recorded gaps. Development remains unmigrated; backup recovery and review of the three historical test schemas remain outstanding. No staging, commit, push, historical ownership assignment or production-readiness claim.
+
 ## Later milestones
 
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | 2 | Minimal React and TypeScript interface for uploading and listing documents | Complete |
 | 3 | User accounts and per-user document access | Complete — agreed local scope and user manual trial |
-| 4 | PDF extraction with explicit handling of unsupported scanned PDFs | Planned |
-| 5 | Retrieval and document questions with verifiable citations | Planned |
+| 4 | PDF extraction with explicit handling of unsupported scanned PDFs | In progress — implementation and verification; user PDF trial pending |
+| 5 | Retrieval and document questions with verifiable citations | In progress — local flow tested and manual AI success reported; detailed acceptance gaps remain |
 | 6 | Saved conversations and explicit user preferences | Planned |
 | 7 | Bounded agent workflows for comparing documents | Planned |
 | 8 | Deployment, monitoring, and recovery | Planned |
